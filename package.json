@@ -1,0 +1,62 @@
+{
+  "name": "@leofcoin/core",
+  "version": "0.5.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "c": "rollup -c",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "doc": "./node_modules/.bin/esdoc"
+  },
+  "bin": {
+    "leofcoin": "bin/cli.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leofcoin/core.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/leofcoin/core/issues"
+  },
+  "homepage": "https://github.com/leofcoin/core#readme",
+  "esdoc": {
+    "source": "./src",
+    "destination": "./docs",
+    "plugins": [
+      {
+        "name": "esdoc-ecmascript-proposal-plugin",
+        "option": {
+          "classProperties": true,
+          "objectRestSpread": true,
+          "doExpressions": true,
+          "functionBind": true,
+          "functionSent": true,
+          "asyncGenerators": true,
+          "decorators": true,
+          "exportExtensions": true,
+          "dynamicImport": true
+        }
+      }
+    ]
+  },
+  "dependencies": {
+    "@hapi/joi": "^17.1.1",
+    "@koa/router": "^8.0.8",
+    "coin-ticker": "^3.2.0",
+    "koa": "^2.12.0",
+    "lfc-api": "^2.12.23",
+    "multi-signature": "^1.1.0",
+    "multi-wallet": "^1.2.6",
+    "randombytes": "^2.1.0"
+  },
+  "devDependencies": {
+    "esdoc": "^1.1.0",
+    "esdoc-ecmascript-proposal-plugin": "^1.0.0",
+    "rollup": "^2.10.4",
+    "rollup-plugin-json": "^4.0.0",
+    "rollup-plugin-modify": "^3.0.0"
+  }
+}
