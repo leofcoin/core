@@ -16,7 +16,7 @@ const transaction = object().keys({
 	id: string().hex().length(64),
 	time: number(),
 	reward: string(),
-	script: string().validate(undefined),
+	script: string(),
 	inputs: array().items(object().keys({
 		tx: string().hex().length(64),
 		index: number(),
