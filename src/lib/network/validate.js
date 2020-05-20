@@ -16,19 +16,18 @@ const transaction = object().keys({
 	id: string().hex().length(64),
 	time: number(),
 	reward: string(),
+	script: string().validate(undefined),
 	inputs: array().items(object().keys({
 		tx: string().hex().length(64),
 		index: number(),
 		amount: number(),
 		address: string(),
-		signature: string().hex(),
-		script: string()
+		signature: string().hex()
 	})),
 	outputs: array().items(object().keys({
 		index: number(),
 		amount: number(),
-		address: string(),
-		script: string()
+		address: string()
 	})),
 });
 
