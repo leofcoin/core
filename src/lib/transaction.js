@@ -6,7 +6,7 @@ import {chain, mempool} from './dagchain/dagchain';
 import { randomBytes } from 'crypto';
 import { encode, decode } from 'bs58';
 import { getUnspentForAddress } from './dagchain/dagchain-interface';
-import MultiWallet from 'multi-wallet';
+import MultiWallet from '@leofcoin/multi-wallet';
 import { network, consensusSubsidyInterval, reward } from '../params.js';
 import * as ipldLfcTx from 'ipld-lfc-tx';
 
@@ -36,8 +36,8 @@ export const validateTransaction = async (multihash, transaction, unspent) => {
 	  	const { signature, address } = input;
 			const hash = transactionInputHash(input);
 
-	  	let wallet = new MultiWallet(network === 'olivia' ? 'leofcoin:olivia' : 'leofcoin');
-	    wallet.fromAddress(address, null, network === 'olivia' ? 'leofcoin:olivia' : 'leofcoin');
+	  	let wallet = new MultiWallet(network);
+	    wallet.fromAddress(address, null, network);
 			
 			if (!wallet.verify(Buffer.from(signature, 'hex'), Buffer.from(hash, 'hex')))
 				throw TransactionError('Invalid input signature');
@@ -132,7 +132,7 @@ export const createRewardTransaction = async (address, height) => {
 };
 
 const verifySignature = (address, signature, hash) => {
-	const wallet = new MultiWallet(network === 'olivia' ? 'leofcoin:olivia' : 'leofcoin');
+	const wallet = new MultiWallet(network);
 	return wallet.verify(signature, hash, address);
 };
 

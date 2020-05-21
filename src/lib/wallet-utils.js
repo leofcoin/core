@@ -1,19 +1,10 @@
-import MultiWallet from 'multi-wallet';
-import { readFile, writeFile } from 'fs';
-import { network, networkConfigPath, walletPath } from '../params';
+import { network } from '../params';
 import { debug } from './../utils'
-import {promisify} from 'util'
-
-const write = promisify(writeFile)
-const read = promisify(readFile)
 
 globalThis.leofcoin = globalThis.leofcoin || {}
 // TODO: encrypt
 
-export const readWallet = async () => {
-	const wallet = await walletStore.get('identity');
-	return wallet.multiWIF
-}
+
 
 export const accountTree = () => {
   const { accounts } = discoverAccounts();
@@ -89,7 +80,8 @@ export const discoverAccountsByName = (root, depth) => {
    */
   const discover = depth => {
 		const tx = []
-    const account = root.derive(`m/${depth}\'/0/0`);
+    const account = root.account(depth);
+		console.log(account.external.address);
 		accounts.push(account);
     if (call < depth) return discover(depth)
     return accounts;
@@ -104,21 +96,4 @@ export const loadAccounts = wallet => {
   const accounts = discoverAccounts(wallet);
 	debug('finished loading accounts')
   return accounts;
-}
-
-export const loadWallet = async () => {
-	debug('loading wallet')
-  try {
-    const saved = await readWallet();
-    // TODO: update network param, support <net> & <net>:<purpose> scheme
-    const root = new MultiWallet(network === 'olivia' ? 'leofcoin:olivia' : 'leofcoin');
-    // TODO: https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki#Account_discovery @AndrewVanardennen @vandeurenglenn
-    // last account is without tx
-    // disallow account creation when previous account has no tx
-    root.import(saved);
-		debug('done loading wallet')
-    return root;
-  } catch (e) {
-    throw e;
-  }
 }

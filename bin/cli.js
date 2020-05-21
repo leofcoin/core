@@ -20,9 +20,9 @@ const args = process.argv.slice(2, process.argv.length);
       await fetch('http://localhost:5050/api/mine')
       // api.mine(api.getMinerConfig())
     } else if (action === 'run') {
-      if (!response) core();
+      if (!response) core({network: 'leofcoin'})
     } else if (action === '--intensity') {
-      if (!response) core()
+      if (!response) core({network: 'leofcoin'})
       const value = args[args.indexOf('--intensity') + 1]
       await fetch('http://localhost:5050/api/config/miner?intensity=' + value, {method: 'put'})
     }

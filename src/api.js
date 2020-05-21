@@ -3,11 +3,10 @@ import { APPDATAPATH, network, configPath } from './params';
 import { join } from 'path';
 import { buildTransaction } from './lib/transaction';
 import { mempool, getBalanceForAddress, getBalanceForAddressAfter } from './lib/dagchain/dagchain-interface';
-import { loadWallet, generateWallet, discoverAccounts } from './lib/wallet-utils';
+import { discoverAccounts } from './lib/wallet-utils';
 import { or } from './shorten';
 import bus from './lib/bus';
 import Miner from './lib/miner';
-import MultiWallet from 'multi-wallet';
 // TODO: multiwallet in browser
 const miners = [];
 
@@ -148,7 +147,7 @@ const accounts = async (discoverDepth = 0) => {
   let wallet;
   let accounts = undefined;
   try {
-    wallet = await loadWallet();
+    wallet = leofcoin.wallet;
     await state('ready', true);
     accounts = discoverAccounts(wallet, discoverDepth);
   } catch (e) {
@@ -212,7 +211,7 @@ export const send = async ({from, to, amount, message}, response) => {
   // await state('ready', true)
   let value;
   try {
-    let wallet = loadWallet();
+    let wallet = leofcoin.wallet;
     // account ...
     let _accounts = await accounts();
     const names = await accountNames();

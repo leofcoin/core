@@ -26,7 +26,7 @@ export const core = async (config = {}) => {
     bus.emit('stage-one');
     
     debug('starting ipfs');
-    const api = await new LfcApi({ init: true, start: true, bootstrap: 'lfc', forceJS: true, star: config.star})
+    const api = await new LfcApi({ init: true, start: true, bootstrap: 'lfc', forceJS: true, star: config.star, network: config.network})
     apiServer()
     try {
       await new GlobalScope(api)

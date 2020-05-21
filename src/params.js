@@ -14,7 +14,7 @@ export const networks = {
 
 export const network = (() => {
   const index = argv.indexOf('--network');
-  return process.env.NETWORK || (index > -1) ? argv[index + 1] : 'olivia';
+  return process.env.NETWORK || (index > -1) ? argv[index + 1] : 'leofcoin';
 })()
 
 export const fixIndex = argv.indexOf('fixIndex') !== -1 ? true : false;
@@ -95,15 +95,15 @@ export const reward = 150;
 export const consensusSubsidyInterval = 52500;
 export const consensusSubsidyPercentage = 12.5; // quarterlings
 // export const genesisCID = '122045f96ab0a6c8a689eaec29eb71333294b985fb25b7409a938b6879702a38b659';
-export const genesisLink = 'zsNS6wZiHUW66J9M1iZ6wnsWS7z52acyZTTWUFgoZPaWaAevd7EQg7u91zRKkoNBHsgH33XY6xPDSbcZJp4Rtfst5K863z';
-export const genesisCID = 'zsNS6wZiHUW66J9M1iZ6wnsWS7z52acyZTTWUFgoZPaWaAevd7EQg7u91zRKkoNBHsgH33XY6xPDSbcZJp4Rtfst5K863z';
-export const GENESISBS58 = 'EKBqhKsFG14thpzEKUbbb94WG9a1p9sm82YQ2YwK6wkme4C1df2dMwggnDgh74zZsBx2UbWi1qDQLysrrU3YKJ6V73sLtASepYieNpx8Fwjxyjh6xWNYToTNbNkp1geiSWq6fneGvn76H2cqMnq';
+export const genesisLink = 'zsNS6wZiHSc2QPHmjV8TMNn798b4Kp9jpjsBNeUkPhaJTza3GosWUgE72Jy3X9jKMrFCcDni7Pq4yXogQN4TcAfrPmTXFt';
+export const genesisCID = 'zsNS6wZiHSc2QPHmjV8TMNn798b4Kp9jpjsBNeUkPhaJTza3GosWUgE72Jy3X9jKMrFCcDni7Pq4yXogQN4TcAfrPmTXFt';
+export const GENESISBS58 = 'EKBqhKsFG14thpzEKUbbb94WG9a1p9sm82YQ2YwK6wkme4C1df2dMwggnDgh74zZsBx2UbWi1qDQLysrrU3YKJ6V73sLtASepYieNpx8Fwjxyjh6xWNYToTNbNkp1geiSWq6fne7Npf37HCZVmi';
 export const GENESISBLOCK = {
 	index: 0,
   prevHash: Buffer.alloc(47).toString('hex'),
-  time: 1581375185,
+  time: 1590240964,
   transactions: [],
-  nonce: 33336
+  nonce: 1077701
 };
 
 export const checkpoints = [
