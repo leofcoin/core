@@ -33,9 +33,9 @@ export const state = (key, wait) => new Promise(async (resolve, reject) => {
   else resolve(state);
 });
 
-export const getConfig = async () => await read(configPath, 'json');
+export const getConfig = async () => await accountStore.get('config');
 
-export const setConfig = async data => await write(configPath, JSON.stringify(data));
+export const setConfig = async data => await accountStore.put('config', data);
 
 export const setMinerConfig = async minerConfig => {
   const data = await getConfig();
@@ -89,6 +89,10 @@ export const transactions = async (number, last) => {
 
 export const mine = async config => {
   await state('ready', true)
+  if (!config) {
+    config = await accountStore.get('config')
+    config = config.miner
+  }
   let { address, intensity, donationAddress, donationAmount } = config;
   if (!intensity) intensity = 1;
   if (intensity && typeof intensity === 'string') intensity = Number(intensity);
@@ -140,15 +144,6 @@ export const importWallet = async (wif) => {
   // return { mnemonic: wallet.mnemonic, accounts: [account.address] }
 }
 
-export const createWallet = async () => {
-  const wallet = await generateWallet();
-
-  // await setAccountNames()
-  console.log(wallet);
-  console.log(wallet.mnemonic);
-  return wallet;
-}
-
 const accounts = async (discoverDepth = 0) => {
   let wallet;
   let accounts = undefined;
@@ -162,20 +157,7 @@ const accounts = async (discoverDepth = 0) => {
   return accounts;
 }
 
-export const accountNames = async () => {
-  const path = join(APPDATAPATH, 'account');
-  let data;
-  try {
-    data = await read(path)
-    data = JSON.parse(data.toString())
-  } catch (e) {
-    if (e.code === 'ENOENT') {
-      data = ['main account']
-      await write(path, JSON.stringify(data))
-    }
-  }
-  return data;
-}
+export const accountNames = async () => await walletStore.get('accounts')
 // TODO: whenever a address is used update depth...
 // IOW
 // external(0).addr => internal(0).addr => external(1).addr => internal(1).addr ...
@@ -203,11 +185,6 @@ const addresses = async () => {
 
 const getMinerConfig = async () => {
   const data = await getConfig();
-  if (!data.miner.address) {
-    const _ = await addresses()
-    data.miner.address = _[0][1][0];
-    await setMinerConfig(data.miner)
-  }
   return data.miner;
 }
 

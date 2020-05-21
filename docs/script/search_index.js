@@ -246,12 +246,6 @@ window.esdocSearchIndex = [
     "function"
   ],
   [
-    "@leofcoin/core/src/api.js~createwallet",
-    "function/index.html#static-function-createWallet",
-    "<span>createWallet</span> <span class=\"search-result-import-path\">@leofcoin/core/src/api.js</span>",
-    "function"
-  ],
-  [
     "@leofcoin/core/src/ms.js~day",
     "function/index.html#static-function-day",
     "<span>day</span> <span class=\"search-result-import-path\">@leofcoin/core/src/ms.js</span>",
@@ -310,12 +304,6 @@ window.esdocSearchIndex = [
     "variable/index.html#static-variable-fixIndex",
     "<span>fixIndex</span> <span class=\"search-result-import-path\">@leofcoin/core/src/params.js</span>",
     "variable"
-  ],
-  [
-    "@leofcoin/core/src/lib/wallet-utils.js~generatewallet",
-    "function/index.html#static-function-generateWallet",
-    "<span>generateWallet</span> <span class=\"search-result-import-path\">@leofcoin/core/src/lib/wallet-utils.js</span>",
-    "function"
   ],
   [
     "@leofcoin/core/src/params.js~genesis",
@@ -789,12 +777,6 @@ window.esdocSearchIndex = [
     "@leofcoin/core/src/ms.js~week",
     "function/index.html#static-function-week",
     "<span>week</span> <span class=\"search-result-import-path\">@leofcoin/core/src/ms.js</span>",
-    "function"
-  ],
-  [
-    "@leofcoin/core/src/lib/wallet-utils.js~writewallet",
-    "function/index.html#static-function-writeWallet",
-    "<span>writeWallet</span> <span class=\"search-result-import-path\">@leofcoin/core/src/lib/wallet-utils.js</span>",
     "function"
   ],
   [

@@ -36,7 +36,6 @@
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-addresses">addresses</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-block">block</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-blocks">blocks</a></span></span></li>
-<li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-createWallet">createWallet</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-emit">emit</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-getConfig">getConfig</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-getMinerConfig">getMinerConfig</a></span></span></li>
@@ -129,11 +128,9 @@
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-accountTree">accountTree</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-discoverAccounts">discoverAccounts</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-discoverAccountsByName">discoverAccountsByName</a></span></span></li>
-<li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-generateWallet">generateWallet</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-loadAccounts">loadAccounts</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-loadWallet">loadWallet</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-readWallet">readWallet</a></span></span></li>
-<li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-writeWallet">writeWallet</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-variable">V</span><span data-ice="name"><span><a href="variable/index.html#static-variable-emitter">emitter</a></span></span></li>
 <li data-ice="doc"><a data-ice="dirPath" class="nav-dir-path" href="identifiers.html#lib-dagchain">lib/dagchain</a><span data-ice="kind" class="kind-class">C</span><span data-ice="name"><span><a href="class/src/lib/dagchain/dagblock.js~DAGBlock.html">DAGBlock</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-class">C</span><span data-ice="name"><span><a href="class/src/lib/dagchain/dagchain.js~DAGChain.html">DAGChain</a></span></span></li>
@@ -167,10 +164,11 @@
 </nav>
 
 <div class="content" data-ice="content"><h1 data-ice="title">src/core.js</h1>
-<pre class="source-code line-number raw-source-code"><code class="prettyprint linenums" data-ice="content">import { getUserConfig, debug, allowFailureUntillEnough, log, groupCollapsed } from &apos;./utils&apos;;
+<pre class="source-code line-number raw-source-code"><code class="prettyprint linenums" data-ice="content">
+import LfcApi from &apos;lfc-api&apos;;
+import { debug, log, groupCollapsed } from &apos;./utils&apos;;
 import bus from &apos;./lib/bus&apos;;
 import GlobalScope from &apos;./global-scope&apos;;
-import LfcApi from &apos;lfc-api&apos;;
 import { join } from &apos;path&apos;;
 import { configPath, networkPath, network, genesis } from &apos;./params&apos;;
 // import ipfsdNode from &apos;./../../ipfsd-node/src/node&apos;;
@@ -186,18 +184,16 @@ import apiServer from &apos;./api-server&apos;
 globalThis.bus = globalThis.bus || bus
 globalThis.peerMap = globalThis.peerMap || new Map()
 
-const exec = platform() === &apos;win32&apos; ? &apos;./ipfs.exe&apos; : &apos;./ipfs&apos;;
 export {_api as api}
 export const core = async (config = {}) =&gt; {
   if (config.debug) process.env.DEBUG = true
 	try {
-    apiServer()
     const now = Date.now();
-    const config = await getUserConfig();
     bus.emit(&apos;stage-one&apos;);
     
     debug(&apos;starting ipfs&apos;);
-    const api = await new LfcApi({ init: true, start: true, bootstrap: &apos;lfc&apos;, forceJS: true })
+    const api = await new LfcApi({ init: true, start: true, bootstrap: &apos;lfc&apos;, forceJS: true, star: config.star})
+    apiServer()
     try {
       await new GlobalScope(api)
     } catch (e) {
@@ -241,7 +237,7 @@ export const core = async (config = {}) =&gt; {
       log(`peer connection took: ${(connection_now - ipfsd_now) / 1000} seconds`);
       log(`total load prep took ${(Date.now() - now) / 1000} seconds`);
     })
-    await write(configPath, JSON.stringify(config, null, &apos;\t&apos;));
+    // await write(configPath, JSON.stringify(config, null, &apos;\t&apos;));
     const chain = new DAGChain({ genesis, network, ipfs: api.ipfs });
     await chain.init(genesis);
     return chain;

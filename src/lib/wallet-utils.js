@@ -9,33 +9,11 @@ const read = promisify(readFile)
 
 globalThis.leofcoin = globalThis.leofcoin || {}
 // TODO: encrypt
-export const writeWallet = async multiWIF => {
-	await write(walletPath, JSON.stringify(multiWIF))
-};
 
 export const readWallet = async () => {
-	const wallet = await read(walletPath);
-	return JSON.parse(wallet.toString())
+	const wallet = await walletStore.get('identity');
+	return wallet.multiWIF
 }
-
-export const generateWallet = async () => {
-	console.log(`Generating wallet for network ${network}`);
-  const config = await read(networkConfigPath, 'json');
-  // console.log(config.Identity.PrivKey);
-  // console.warn('wallet encrypted using your peer privatKey');
-  // TODO: encrypt the wallet
-  // TODO: update network param, support <net> & <net>:<purpose> scheme
-	let wallet = new MultiWallet(network === 'olivia' ? 'leofcoin:olivia' : 'leofcoin');
-	const mnemonic = wallet.generate();
-  const account = wallet.account(0);
-  wallet = {
-    mnemonic,
-    multiWIF: wallet.export(),
-    accounts: ['main account', account.external(0).address]
-  }
-  await writeWallet(wallet);
-	return wallet;
-};
 
 export const accountTree = () => {
   const { accounts } = discoverAccounts();
@@ -137,7 +115,7 @@ export const loadWallet = async () => {
     // TODO: https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki#Account_discovery @AndrewVanardennen @vandeurenglenn
     // last account is without tx
     // disallow account creation when previous account has no tx
-    root.import(saved.multiWIF);
+    root.import(saved);
 		debug('done loading wallet')
     return root;
   } catch (e) {

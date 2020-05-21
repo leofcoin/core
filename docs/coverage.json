@@ -1,6 +1,6 @@
 {
-  "coverage": "12.5%",
-  "expectCount": 256,
+  "coverage": "12.69%",
+  "expectCount": 252,
   "actualCount": 32,
   "files": {
     "src/api-server.js": {
@@ -11,7 +11,7 @@
       ]
     },
     "src/api.js": {
-      "expectCount": 22,
+      "expectCount": 21,
       "actualCount": 3,
       "undocumentLines": [
         12,
@@ -22,17 +22,16 @@
         58,
         67,
         90,
-        136,
-        143,
-        165,
-        214,
-        259,
-        261,
-        263,
-        265,
-        194,
-        204,
-        152
+        140,
+        160,
+        191,
+        236,
+        238,
+        240,
+        242,
+        176,
+        186,
+        147
       ]
     },
     "src/bin/cli.js": {
@@ -45,10 +44,9 @@
       ]
     },
     "src/core.js": {
-      "expectCount": 2,
+      "expectCount": 1,
       "actualCount": 0,
       "undocumentLines": [
-        20,
         22
       ]
     },
@@ -270,19 +268,17 @@
       ]
     },
     "src/lib/wallet-utils.js": {
-      "expectCount": 11,
+      "expectCount": 9,
       "actualCount": 1,
       "undocumentLines": [
         7,
         8,
-        12,
-        17,
+        13,
+        18,
         22,
-        41,
-        45,
-        107,
-        125,
-        132
+        84,
+        102,
+        109
       ]
     },
     "src/lib/workers/miner-worker.js": {

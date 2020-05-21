@@ -36,7 +36,6 @@
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-addresses">addresses</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-block">block</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-blocks">blocks</a></span></span></li>
-<li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-createWallet">createWallet</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-emit">emit</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-getConfig">getConfig</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-getMinerConfig">getMinerConfig</a></span></span></li>
@@ -129,11 +128,9 @@
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-accountTree">accountTree</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-discoverAccounts">discoverAccounts</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-discoverAccountsByName">discoverAccountsByName</a></span></span></li>
-<li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-generateWallet">generateWallet</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-loadAccounts">loadAccounts</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-loadWallet">loadWallet</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-readWallet">readWallet</a></span></span></li>
-<li data-ice="doc"><span data-ice="kind" class="kind-function">F</span><span data-ice="name"><span><a href="function/index.html#static-function-writeWallet">writeWallet</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-variable">V</span><span data-ice="name"><span><a href="variable/index.html#static-variable-emitter">emitter</a></span></span></li>
 <li data-ice="doc"><a data-ice="dirPath" class="nav-dir-path" href="identifiers.html#lib-dagchain">lib/dagchain</a><span data-ice="kind" class="kind-class">C</span><span data-ice="name"><span><a href="class/src/lib/dagchain/dagblock.js~DAGBlock.html">DAGBlock</a></span></span></li>
 <li data-ice="doc"><span data-ice="kind" class="kind-class">C</span><span data-ice="name"><span><a href="class/src/lib/dagchain/dagchain.js~DAGChain.html">DAGChain</a></span></span></li>
@@ -178,34 +175,11 @@ const read = promisify(readFile)
 
 globalThis.leofcoin = globalThis.leofcoin || {}
 // TODO: encrypt
-export const writeWallet = async multiWIF =&gt; {
-	await walletStore.put()
-	await write(walletPath, JSON.stringify(multiWIF))
-};
 
 export const readWallet = async () =&gt; {
-	const wallet = await read(walletPath);
-	return JSON.parse(wallet.toString())
+	const wallet = await walletStore.get(&apos;identity&apos;);
+	return wallet.multiWIF
 }
-
-export const generateWallet = async () =&gt; {
-	console.log(`Generating wallet for network ${network}`);
-  const config = await read(networkConfigPath, &apos;json&apos;);
-  // console.log(config.Identity.PrivKey);
-  // console.warn(&apos;wallet encrypted using your peer privatKey&apos;);
-  // TODO: encrypt the wallet
-  // TODO: update network param, support &lt;net&gt; &amp; &lt;net&gt;:&lt;purpose&gt; scheme
-	let wallet = new MultiWallet(network === &apos;olivia&apos; ? &apos;leofcoin:olivia&apos; : &apos;leofcoin&apos;);
-	const mnemonic = wallet.generate();
-  const account = wallet.account(0);
-  wallet = {
-    mnemonic,
-    multiWIF: wallet.export(),
-    accounts: [&apos;main account&apos;, account.external(0).address]
-  }
-	await walletStore.put(wallet)
-	return wallet;
-};
 
 export const accountTree = () =&gt; {
   const { accounts } = discoverAccounts();
@@ -307,7 +281,7 @@ export const loadWallet = async () =&gt; {
     // TODO: https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki#Account_discovery @AndrewVanardennen @vandeurenglenn
     // last account is without tx
     // disallow account creation when previous account has no tx
-    root.import(saved.multiWIF);
+    root.import(saved);
 		debug(&apos;done loading wallet&apos;)
     return root;
   } catch (e) {

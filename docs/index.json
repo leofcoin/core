@@ -597,7 +597,7 @@
     "__docId__": 50,
     "kind": "file",
     "name": "src/api.js",
-    "content": "import { read, write } from 'crypto-io-fs';\r\nimport { APPDATAPATH, network, configPath } from './params';\r\nimport { join } from 'path';\r\nimport { buildTransaction } from './lib/transaction';\r\nimport { mempool, getBalanceForAddress, getBalanceForAddressAfter } from './lib/dagchain/dagchain-interface';\r\nimport { loadWallet, generateWallet, discoverAccounts } from './lib/wallet-utils';\nimport { or } from './shorten';\r\nimport bus from './lib/bus';\nimport Miner from './lib/miner';\nimport MultiWallet from 'multi-wallet';\n// TODO: multiwallet in browser\nconst miners = [];\n\nglobalThis.bus = globalThis.bus || bus\n\nglobalThis.states = globalThis.states || {\n  ready: false,\n  syncing: false,\n  connecting: false,\n  mining: false\n};\nexport const blockHashSet = globalThis.blockHashSet;\n/**\n* state - get current app state\n*\n* @param {string} key - event name\n* @param {boolean|string} [wait=false|wait='event'] - wait untill next event when asked state is false\n* or wait untill next event when set to 'event'\n*/\nexport const state = (key, wait) => new Promise(async (resolve, reject) => {\n  const state = await globalThis.states[key];\n  if (wait && !state || wait && wait === 'event') bus.once(key, state => resolve(state));\n  else resolve(state);\n});\n\nexport const getConfig = async () => await read(configPath, 'json');\n\nexport const setConfig = async data => await write(configPath, JSON.stringify(data));\n\nexport const setMinerConfig = async minerConfig => {\n  const data = await getConfig();\n  data.miner = minerConfig;\n  await setConfig(data);\n  return;\n}\n\n/**\n *\n * @param {string|number} height hash or height\n */\nexport const block = async (height) => {\n  await state('ready', true)\n  if (!height) return chain[chain.length - 1];\n  if (typeof height !== 'string') return chain[height]\n  return chain[blockHashSet[height]];\n};\n\nexport const blocks = async (number, last) => {\n  await state('ready', true)\n  console.log(number, last);\n  if (!number) return leofcoin.chain.get();\n  else if (last) {\n    return chain.slice((chain.length - number), chain.length);\n  } else return block(number);\n};\n\nexport const transactions = async (number, last) => {\n  await state('ready', true)\n  if (!number) return chain[chain.length - 1].transactions.map(tx => {\n    tx.parentHash = chain[chain.length - 1].hash\n    return tx;\n  });\n  let blocks;\n  if (last) blocks = chain.slice((chain.length - number), chain.length);\n  else blocks = chain.slice(0, number + 1);\n\n  const tx = blocks.reduce((p, c) => [...p, ...c.transactions.map(tx => {\n    tx.parentHash = c.hash;\n    return tx;\n  })], [])\n  if (tx.length < number) {\n    return transactions(number + 10, last)\n  }\n  if (last) return tx.slice((tx.length - number), tx.length)\n  else return tx.slice(0, number)\n\n\n};\n\nexport const mine = async config => {\n  await state('ready', true)\n  let { address, intensity, donationAddress, donationAmount } = config;\n  if (!intensity) intensity = 1;\n  if (intensity && typeof intensity === 'string') intensity = Number(intensity);\n  console.log({ address, intensity, donationAddress, donationAmount });\n  if (donationAddress && donationAmount === 'undefined') donationAmount = 3; //procent\n  const addMiner = count => {\n    for (var i = 0; i < count; i++) {\n      const miner = new Miner();\n      miner.address = address;\n      // miner.donationAddress = donationAddress;\n      // miner.donationAmount = donationAmount;\n      miner.start();\n      miners.push(miner);\n    }\n  }\n  if (globalThis.states.mining && miners.length === intensity) {\n    miners.forEach(miner => miner.stop());\n    globalThis.states.mining = false;\n  } else if (!globalThis.states.mining && miners.length === intensity) {\n    miners.forEach(miner => miner.start());\n    globalThis.states.mining = true;\n  } else {\n    if (miners.length > 0 && miners.length === intensity) {\n      miners.forEach(miner => {\n        miner.address = address;\n      });\n    } else if (miners.length > intensity) {\n      const removeCount = miners.length - intensity\n      const removed = miners.slice(0, removeCount);\n      removed.forEach(miner => miner.stop());\n    } else if (miners.length < intensity && miners.length > 0) {\n      const addCount = intensity - miners.length;\n      addMiner(addCount);\n    } else {\n      addMiner(intensity);\n    }\n    globalThis.states.mining = true;\n  }\n  // TODO: add donationAddress\n  // TODO: add donation option in ui\n  // if (!address) address = donationAddress;\n\n}\n\nexport const importWallet = async (wif) => {\n  // wallet = await generateWallet();\n  // console.log(wallet.mnemonic);\n  // const account = wallet.derive(`m/0\\'/0/0`)\n  // return { mnemonic: wallet.mnemonic, accounts: [account.address] }\n}\n\nexport const createWallet = async () => {\n  const wallet = await generateWallet();\n\n  // await setAccountNames()\n  console.log(wallet);\n  console.log(wallet.mnemonic);\n  return wallet;\n}\r\n\r\nconst accounts = async (discoverDepth = 0) => {\r\n  let wallet;\r\n  let accounts = undefined;\r\n  try {\r\n    wallet = await loadWallet();\n    await state('ready', true);\n    accounts = discoverAccounts(wallet, discoverDepth);\r\n  } catch (e) {\n    console.log('readied');\r\n  }\r\n  return accounts;\r\n}\n\nexport const accountNames = async () => {\n  const path = join(APPDATAPATH, 'account');\n  let data;\n  try {\n    data = await read(path)\n    data = JSON.parse(data.toString())\n  } catch (e) {\n    if (e.code === 'ENOENT') {\n      data = ['main account']\n      await write(path, JSON.stringify(data))\n    }\n  }\n  return data;\n}\n// TODO: whenever a address is used update depth...\n// IOW\n// external(0).addr => internal(0).addr => external(1).addr => internal(1).addr ...\n/**\n * @param {object} account - hdaccount\n * @param {number} depth - account depth\n * @return {array} [external, internal] - addresses\n */\nconst _addresses = ([account], depth = 0) => {\n  // const external = account.external(0);\n  // const external = account.external(0);\n  // console.log([account.external(0), account.internal(0).address]);\n  return [account.external(0).address, account.internal(0).address];\n}\r\n\r\nconst addresses = async () => {\r\n  let call = 0;\r\n  let _accounts = await accounts();\n  const names = await accountNames();\n  // TODO: allow account by name (even when there aren't any transactions...)\n  // if (_accounts && _accounts.length < names.length) _account = [..._accounts, ...await accounts(names.length)]\r\n  if (_accounts) return _accounts.map((account, i) => [or(names[i], i), _addresses(account, i)]);\n  return undefined;\r\n}\r\n\nconst getMinerConfig = async () => {\n  const data = await getConfig();\n  if (!data.miner.address) {\n    const _ = await addresses()\n    data.miner.address = _[0][1][0];\n    await setMinerConfig(data.miner)\n  }\n  return data.miner;\n}\n\r\nexport const send = async ({from, to, amount, message}, response) => {\n  // TODO:\n  // const service = await mss({globalThis.ipfs, chain: chain.get()})\n\t// \tconst wallet = new MultiWallet('leofcoin:olivia')\n\t// \twallet.import(mwif)\n\t// \tconst account = wallet.account(0)\n\t// \tconst change = account.internal(0).address;\n\t// \tconst pub = account.external(0);\n  //   const address = pub.address;\n  //   const olivia = {\n  //   \tpayments: {\n  //       version: 0,\n  //       unspent: 0x1fa443d7 // ounsp\n  //     }\n  //   };\n\t// \tconst buildAndBroadcast = service.build(olivia, { address }, change)\n\t// \tservice.participate(olivia, pub);\n\t// \tbuildAndBroadcast.unspent(to, amount)\n  // TODO: implement multi-script-service\r\n\r\n  // TODO: validate transaction\n  // await state('ready', true)\n  let value;\r\n  try {\r\n    let wallet = loadWallet();\r\n    // account ...\n    let _accounts = await accounts();\n    const names = await accountNames();\n    // TODO: cleanup wallet internal/external...\n    // something like accounts: [{ name, internal: [internal(0), internal(1), ...]}]\r\n    value = await buildTransaction(_accounts[names.indexOf(from[1])][0].external(0), to, parseInt(amount))\r\n\r\n    const tx = await leofcoin.transaction.get(value.multihash)\r\n    \r\n    globalThis.ipfs.pubsub.publish('announce-transaction', JSON.stringify(value))\r\n    tx.hash = value.multihash\r\n    value = tx\r\n\r\n  } catch (e) {\r\n    throw e;\r\n  }\n\n  return value;\r\n}\r\n\r\nexport const balance = getBalanceForAddress;\n\nexport const balanceAfter = getBalanceForAddressAfter;\n\r\nconst on = (ev, cb) => bus.on(ev, cb);\n\nconst emit = (ev, data) => bus.emit(ev, data);\n\nexport {network, on, emit, addresses, getMinerConfig, accounts}\n",
+    "content": "import { read, write } from 'crypto-io-fs';\r\nimport { APPDATAPATH, network, configPath } from './params';\r\nimport { join } from 'path';\r\nimport { buildTransaction } from './lib/transaction';\r\nimport { mempool, getBalanceForAddress, getBalanceForAddressAfter } from './lib/dagchain/dagchain-interface';\r\nimport { loadWallet, generateWallet, discoverAccounts } from './lib/wallet-utils';\nimport { or } from './shorten';\r\nimport bus from './lib/bus';\nimport Miner from './lib/miner';\nimport MultiWallet from 'multi-wallet';\n// TODO: multiwallet in browser\nconst miners = [];\n\nglobalThis.bus = globalThis.bus || bus\n\nglobalThis.states = globalThis.states || {\n  ready: false,\n  syncing: false,\n  connecting: false,\n  mining: false\n};\nexport const blockHashSet = globalThis.blockHashSet;\n/**\n* state - get current app state\n*\n* @param {string} key - event name\n* @param {boolean|string} [wait=false|wait='event'] - wait untill next event when asked state is false\n* or wait untill next event when set to 'event'\n*/\nexport const state = (key, wait) => new Promise(async (resolve, reject) => {\n  const state = await globalThis.states[key];\n  if (wait && !state || wait && wait === 'event') bus.once(key, state => resolve(state));\n  else resolve(state);\n});\n\nexport const getConfig = async () => await accountStore.get('config');\n\nexport const setConfig = async data => await accountStore.put('config', data);\n\nexport const setMinerConfig = async minerConfig => {\n  const data = await getConfig();\n  data.miner = minerConfig;\n  await setConfig(data);\n  return;\n}\n\n/**\n *\n * @param {string|number} height hash or height\n */\nexport const block = async (height) => {\n  await state('ready', true)\n  if (!height) return chain[chain.length - 1];\n  if (typeof height !== 'string') return chain[height]\n  return chain[blockHashSet[height]];\n};\n\nexport const blocks = async (number, last) => {\n  await state('ready', true)\n  console.log(number, last);\n  if (!number) return leofcoin.chain.get();\n  else if (last) {\n    return chain.slice((chain.length - number), chain.length);\n  } else return block(number);\n};\n\nexport const transactions = async (number, last) => {\n  await state('ready', true)\n  if (!number) return chain[chain.length - 1].transactions.map(tx => {\n    tx.parentHash = chain[chain.length - 1].hash\n    return tx;\n  });\n  let blocks;\n  if (last) blocks = chain.slice((chain.length - number), chain.length);\n  else blocks = chain.slice(0, number + 1);\n\n  const tx = blocks.reduce((p, c) => [...p, ...c.transactions.map(tx => {\n    tx.parentHash = c.hash;\n    return tx;\n  })], [])\n  if (tx.length < number) {\n    return transactions(number + 10, last)\n  }\n  if (last) return tx.slice((tx.length - number), tx.length)\n  else return tx.slice(0, number)\n\n\n};\n\nexport const mine = async config => {\n  await state('ready', true)\n  if (!config) {\n    config = await accountStore.get('config')\n    config = config.miner\n  }\n  let { address, intensity, donationAddress, donationAmount } = config;\n  if (!intensity) intensity = 1;\n  if (intensity && typeof intensity === 'string') intensity = Number(intensity);\n  console.log({ address, intensity, donationAddress, donationAmount });\n  if (donationAddress && donationAmount === 'undefined') donationAmount = 3; //procent\n  const addMiner = count => {\n    for (var i = 0; i < count; i++) {\n      const miner = new Miner();\n      miner.address = address;\n      // miner.donationAddress = donationAddress;\n      // miner.donationAmount = donationAmount;\n      miner.start();\n      miners.push(miner);\n    }\n  }\n  if (globalThis.states.mining && miners.length === intensity) {\n    miners.forEach(miner => miner.stop());\n    globalThis.states.mining = false;\n  } else if (!globalThis.states.mining && miners.length === intensity) {\n    miners.forEach(miner => miner.start());\n    globalThis.states.mining = true;\n  } else {\n    if (miners.length > 0 && miners.length === intensity) {\n      miners.forEach(miner => {\n        miner.address = address;\n      });\n    } else if (miners.length > intensity) {\n      const removeCount = miners.length - intensity\n      const removed = miners.slice(0, removeCount);\n      removed.forEach(miner => miner.stop());\n    } else if (miners.length < intensity && miners.length > 0) {\n      const addCount = intensity - miners.length;\n      addMiner(addCount);\n    } else {\n      addMiner(intensity);\n    }\n    globalThis.states.mining = true;\n  }\n  // TODO: add donationAddress\n  // TODO: add donation option in ui\n  // if (!address) address = donationAddress;\n\n}\n\nexport const importWallet = async (wif) => {\n  // wallet = await generateWallet();\n  // console.log(wallet.mnemonic);\n  // const account = wallet.derive(`m/0\\'/0/0`)\n  // return { mnemonic: wallet.mnemonic, accounts: [account.address] }\n}\r\n\r\nconst accounts = async (discoverDepth = 0) => {\r\n  let wallet;\r\n  let accounts = undefined;\r\n  try {\r\n    wallet = await loadWallet();\n    await state('ready', true);\n    accounts = discoverAccounts(wallet, discoverDepth);\r\n  } catch (e) {\n    console.log('readied');\r\n  }\r\n  return accounts;\r\n}\n\nexport const accountNames = async () => await walletStore.get('accounts')\n// TODO: whenever a address is used update depth...\n// IOW\n// external(0).addr => internal(0).addr => external(1).addr => internal(1).addr ...\n/**\n * @param {object} account - hdaccount\n * @param {number} depth - account depth\n * @return {array} [external, internal] - addresses\n */\nconst _addresses = ([account], depth = 0) => {\n  // const external = account.external(0);\n  // const external = account.external(0);\n  // console.log([account.external(0), account.internal(0).address]);\n  return [account.external(0).address, account.internal(0).address];\n}\r\n\r\nconst addresses = async () => {\r\n  let call = 0;\r\n  let _accounts = await accounts();\n  const names = await accountNames();\n  // TODO: allow account by name (even when there aren't any transactions...)\n  // if (_accounts && _accounts.length < names.length) _account = [..._accounts, ...await accounts(names.length)]\r\n  if (_accounts) return _accounts.map((account, i) => [or(names[i], i), _addresses(account, i)]);\n  return undefined;\r\n}\r\n\nconst getMinerConfig = async () => {\n  const data = await getConfig();\n  return data.miner;\n}\n\r\nexport const send = async ({from, to, amount, message}, response) => {\n  // TODO:\n  // const service = await mss({globalThis.ipfs, chain: chain.get()})\n\t// \tconst wallet = new MultiWallet('leofcoin:olivia')\n\t// \twallet.import(mwif)\n\t// \tconst account = wallet.account(0)\n\t// \tconst change = account.internal(0).address;\n\t// \tconst pub = account.external(0);\n  //   const address = pub.address;\n  //   const olivia = {\n  //   \tpayments: {\n  //       version: 0,\n  //       unspent: 0x1fa443d7 // ounsp\n  //     }\n  //   };\n\t// \tconst buildAndBroadcast = service.build(olivia, { address }, change)\n\t// \tservice.participate(olivia, pub);\n\t// \tbuildAndBroadcast.unspent(to, amount)\n  // TODO: implement multi-script-service\r\n\r\n  // TODO: validate transaction\n  // await state('ready', true)\n  let value;\r\n  try {\r\n    let wallet = loadWallet();\r\n    // account ...\n    let _accounts = await accounts();\n    const names = await accountNames();\n    // TODO: cleanup wallet internal/external...\n    // something like accounts: [{ name, internal: [internal(0), internal(1), ...]}]\r\n    value = await buildTransaction(_accounts[names.indexOf(from[1])][0].external(0), to, parseInt(amount))\r\n\r\n    const tx = await leofcoin.transaction.get(value.multihash)\r\n    \r\n    globalThis.ipfs.pubsub.publish('announce-transaction', JSON.stringify(value))\r\n    tx.hash = value.multihash\r\n    value = tx\r\n\r\n  } catch (e) {\r\n    throw e;\r\n  }\n\n  return value;\r\n}\r\n\r\nexport const balance = getBalanceForAddress;\n\nexport const balanceAfter = getBalanceForAddressAfter;\n\r\nconst on = (ev, cb) => bus.on(ev, cb);\n\nconst emit = (ev, data) => bus.emit(ev, data);\n\nexport {network, on, emit, addresses, getMinerConfig, accounts}\n",
     "static": true,
     "longname": "D:/Workspace-laptop/leofcoin/core/src/api.js",
     "access": "public",
@@ -902,7 +902,7 @@
     "importPath": "@leofcoin/core/src/api.js",
     "importStyle": "{importWallet}",
     "description": null,
-    "lineNumber": 136,
+    "lineNumber": 140,
     "undocument": true,
     "params": [
       {
@@ -917,29 +917,6 @@
   {
     "__docId__": 62,
     "kind": "function",
-    "name": "createWallet",
-    "memberof": "src/api.js",
-    "generator": false,
-    "async": true,
-    "static": true,
-    "longname": "src/api.js~createWallet",
-    "access": "public",
-    "export": true,
-    "importPath": "@leofcoin/core/src/api.js",
-    "importStyle": "{createWallet}",
-    "description": null,
-    "lineNumber": 143,
-    "undocument": true,
-    "params": [],
-    "return": {
-      "types": [
-        "*"
-      ]
-    }
-  },
-  {
-    "__docId__": 63,
-    "kind": "function",
     "name": "accountNames",
     "memberof": "src/api.js",
     "generator": false,
@@ -951,17 +928,13 @@
     "importPath": "@leofcoin/core/src/api.js",
     "importStyle": "{accountNames}",
     "description": null,
-    "lineNumber": 165,
+    "lineNumber": 160,
     "undocument": true,
     "params": [],
-    "return": {
-      "types": [
-        "*"
-      ]
-    }
+    "return": null
   },
   {
-    "__docId__": 64,
+    "__docId__": 63,
     "kind": "function",
     "name": "_addresses",
     "memberof": "src/api.js",
@@ -974,7 +947,7 @@
     "importPath": "@leofcoin/core/src/api.js",
     "importStyle": null,
     "description": "",
-    "lineNumber": 187,
+    "lineNumber": 169,
     "params": [
       {
         "nullable": null,
@@ -1008,7 +981,7 @@
     "ignore": true
   },
   {
-    "__docId__": 65,
+    "__docId__": 64,
     "kind": "function",
     "name": "send",
     "memberof": "src/api.js",
@@ -1021,7 +994,7 @@
     "importPath": "@leofcoin/core/src/api.js",
     "importStyle": "{send}",
     "description": null,
-    "lineNumber": 214,
+    "lineNumber": 191,
     "undocument": true,
     "params": [
       {
@@ -1051,7 +1024,7 @@
     }
   },
   {
-    "__docId__": 66,
+    "__docId__": 65,
     "kind": "variable",
     "name": "balance",
     "memberof": "src/api.js",
@@ -1062,7 +1035,7 @@
     "importPath": "@leofcoin/core/src/api.js",
     "importStyle": "{balance}",
     "description": null,
-    "lineNumber": 259,
+    "lineNumber": 236,
     "undocument": true,
     "type": {
       "types": [
@@ -1071,7 +1044,7 @@
     }
   },
   {
-    "__docId__": 67,
+    "__docId__": 66,
     "kind": "variable",
     "name": "balanceAfter",
     "memberof": "src/api.js",
@@ -1082,7 +1055,7 @@
     "importPath": "@leofcoin/core/src/api.js",
     "importStyle": "{balanceAfter}",
     "description": null,
-    "lineNumber": 261,
+    "lineNumber": 238,
     "undocument": true,
     "type": {
       "types": [
@@ -1091,7 +1064,7 @@
     }
   },
   {
-    "__docId__": 68,
+    "__docId__": 67,
     "kind": "function",
     "name": "on",
     "memberof": "src/api.js",
@@ -1104,7 +1077,7 @@
     "importPath": "@leofcoin/core/src/api.js",
     "importStyle": "{on}",
     "description": null,
-    "lineNumber": 263,
+    "lineNumber": 240,
     "undocument": true,
     "params": [
       {
@@ -1123,7 +1096,7 @@
     "return": null
   },
   {
-    "__docId__": 69,
+    "__docId__": 68,
     "kind": "function",
     "name": "emit",
     "memberof": "src/api.js",
@@ -1136,7 +1109,7 @@
     "importPath": "@leofcoin/core/src/api.js",
     "importStyle": "{emit}",
     "description": null,
-    "lineNumber": 265,
+    "lineNumber": 242,
     "undocument": true,
     "params": [
       {
@@ -1155,7 +1128,7 @@
     "return": null
   },
   {
-    "__docId__": 70,
+    "__docId__": 69,
     "kind": "function",
     "name": "addresses",
     "memberof": "src/api.js",
@@ -1168,7 +1141,7 @@
     "importPath": "@leofcoin/core/src/api.js",
     "importStyle": "{addresses}",
     "description": null,
-    "lineNumber": 194,
+    "lineNumber": 176,
     "undocument": true,
     "params": [],
     "return": {
@@ -1178,7 +1151,7 @@
     }
   },
   {
-    "__docId__": 71,
+    "__docId__": 70,
     "kind": "function",
     "name": "getMinerConfig",
     "memberof": "src/api.js",
@@ -1191,7 +1164,7 @@
     "importPath": "@leofcoin/core/src/api.js",
     "importStyle": "{getMinerConfig}",
     "description": null,
-    "lineNumber": 204,
+    "lineNumber": 186,
     "undocument": true,
     "params": [],
     "return": {
@@ -1201,7 +1174,7 @@
     }
   },
   {
-    "__docId__": 72,
+    "__docId__": 71,
     "kind": "function",
     "name": "accounts",
     "memberof": "src/api.js",
@@ -1214,7 +1187,7 @@
     "importPath": "@leofcoin/core/src/api.js",
     "importStyle": "{accounts}",
     "description": null,
-    "lineNumber": 152,
+    "lineNumber": 147,
     "undocument": true,
     "params": [
       {
@@ -1234,7 +1207,7 @@
     }
   },
   {
-    "__docId__": 73,
+    "__docId__": 72,
     "kind": "file",
     "name": "src/bin/cli.js",
     "content": "const { genesisBlock } = require('./../lib/blockchain');\r\nconst core = require('./../core');;\r\nconst block = genesisBlock();\r\nconsole.log(block.hash, Buffer(JSON.stringify(block)));\r\nswitch (process.argv[2]) {\r\n  case 'init':\r\n    const block = genesisBlock();\r\n    ipfs.dag.put(block, {cid: block.hash})\r\n    break;\r\n}\r\n",
@@ -1245,7 +1218,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 74,
+    "__docId__": 73,
     "kind": "variable",
     "name": "genesisBlock",
     "memberof": "src/bin/cli.js",
@@ -1266,7 +1239,7 @@
     "ignore": true
   },
   {
-    "__docId__": 75,
+    "__docId__": 74,
     "kind": "variable",
     "name": "core",
     "memberof": "src/bin/cli.js",
@@ -1287,7 +1260,7 @@
     "ignore": true
   },
   {
-    "__docId__": 76,
+    "__docId__": 75,
     "kind": "variable",
     "name": "block",
     "memberof": "src/bin/cli.js",
@@ -1308,10 +1281,10 @@
     "ignore": true
   },
   {
-    "__docId__": 77,
+    "__docId__": 76,
     "kind": "file",
     "name": "src/core.js",
-    "content": "import { getUserConfig, debug, allowFailureUntillEnough, log, groupCollapsed } from './utils';\r\nimport bus from './lib/bus';\r\nimport GlobalScope from './global-scope';\r\nimport LfcApi from 'lfc-api';\r\nimport { join } from 'path';\r\nimport { configPath, networkPath, network, genesis } from './params';\r\n// import ipfsdNode from './../../ipfsd-node/src/node';\r\nimport { write } from 'crypto-io-fs';\r\n// import ipfsStar from './lib/network/ipfs-star';\r\n// import { connect, connectBootstrap } from './lib/network/peernet';\r\nimport { DAGChain } from './lib/dagchain/dagchain.js';\r\n// import Room from './lib/network/room.js';\r\n// import DiscoRoom from '@leofcoin/disco-room';\r\nimport { platform } from 'os';\r\nimport * as _api from './api'\r\nimport apiServer from './api-server'\r\nglobalThis.bus = globalThis.bus || bus\r\nglobalThis.peerMap = globalThis.peerMap || new Map()\r\n\r\nconst exec = platform() === 'win32' ? './ipfs.exe' : './ipfs';\r\nexport {_api as api}\r\nexport const core = async (config = {}) => {\r\n  if (config.debug) process.env.DEBUG = true\r\n\ttry {\r\n    apiServer()\r\n    const now = Date.now();\r\n    const config = await getUserConfig();\r\n    bus.emit('stage-one');\r\n    \n    debug('starting ipfs');\r\n    const api = await new LfcApi({ init: true, start: true, bootstrap: 'lfc', forceJS: true })\n    try {\n      await new GlobalScope(api)\n    } catch (e) {\n      console.warn(e);\n    }\n    // globalThis.id = api.peerId;\n    // globalThis.ipfs = api.ipfs;\n    \n    const ipfsd_now = Date.now();\r\n    // await connectBootstrap();\r\n\r\n    const bootstrap_now = Date.now();\r\n\r\n    // globalThis.getPeers = () => disco.peers || [];\r\n    const signal_now = Date.now();\r\n    process.on('exit', async () => {\r\n      console.log('exit');\r\n        try {\r\n          await ipfs.pubsub.unsubscribe('block-added');\r\n          await ipfs.pubsub.unsubscribe('announce-transaction');\r\n          await ipfs.pubsub.unsubscribe('invalid-transaction');\r\n        } catch (e) {\r\n          console.log(e);\r\n        }\r\n    })\r\n    process.on('close', () => {\r\n      console.log('close');\r\n    })\r\n    process.on('SIGINT', async () => {\r\n      console.log(\"Caught interrupt signal\");\r\n      setTimeout(async () => {\r\n        process.exit();\r\n      }, 50);\r\n    });\r\n    const connection_now = Date.now();\r\n    bus.emit('stage-two');\r\n    groupCollapsed('Initialize', () => {\r\n      log(`ipfs daemon startup took: ${(ipfsd_now - now) / 1000} seconds`);\r\n      log(`connecting with bootstrap took: ${(bootstrap_now - ipfsd_now) / 1000} seconds`);\r\n      log(`signal server startup took: ${(signal_now - bootstrap_now) / 1000} seconds`);\r\n      log(`peer connection took: ${(connection_now - ipfsd_now) / 1000} seconds`);\r\n      log(`total load prep took ${(Date.now() - now) / 1000} seconds`);\r\n    })\r\n    await write(configPath, JSON.stringify(config, null, '\\t'));\r\n    const chain = new DAGChain({ genesis, network, ipfs: api.ipfs });\r\n    await chain.init(genesis);\r\n    return chain;\r\n\t} catch (e) {\r\n    if (e.code === 'ECONNREFUSED' || e.message && e.message.includes('cannot acquire lock')) {\r\n      // await cleanRepo();\r\n      console.log('retrying');\r\n      // return core({ genesis, network });\r\n    }\r\n\t\tconsole.error(`load-error::${e}`);\r\n    // process.exit()\r\n\t}\r\n}\r\n",
+    "content": "\r\nimport LfcApi from 'lfc-api';\r\nimport { debug, log, groupCollapsed } from './utils';\r\nimport bus from './lib/bus';\r\nimport GlobalScope from './global-scope';\r\nimport { join } from 'path';\r\nimport { configPath, networkPath, network, genesis } from './params';\r\n// import ipfsdNode from './../../ipfsd-node/src/node';\r\nimport { write } from 'crypto-io-fs';\r\n// import ipfsStar from './lib/network/ipfs-star';\r\n// import { connect, connectBootstrap } from './lib/network/peernet';\r\nimport { DAGChain } from './lib/dagchain/dagchain.js';\r\n// import Room from './lib/network/room.js';\r\n// import DiscoRoom from '@leofcoin/disco-room';\r\nimport { platform } from 'os';\r\nimport * as _api from './api'\r\nimport apiServer from './api-server'\r\nglobalThis.bus = globalThis.bus || bus\r\nglobalThis.peerMap = globalThis.peerMap || new Map()\r\n\r\nexport {_api as api}\r\nexport const core = async (config = {}) => {\r\n  if (config.debug) process.env.DEBUG = true\r\n\ttry {\r\n    const now = Date.now();\r\n    bus.emit('stage-one');\r\n    \n    debug('starting ipfs');\r\n    const api = await new LfcApi({ init: true, start: true, bootstrap: 'lfc', forceJS: true, star: config.star})\n    apiServer()\n    try {\n      await new GlobalScope(api)\n    } catch (e) {\n      console.warn(e);\n    }\n    // globalThis.id = api.peerId;\n    // globalThis.ipfs = api.ipfs;\n    \n    const ipfsd_now = Date.now();\r\n    // await connectBootstrap();\r\n\r\n    const bootstrap_now = Date.now();\r\n\r\n    // globalThis.getPeers = () => disco.peers || [];\r\n    const signal_now = Date.now();\r\n    process.on('exit', async () => {\r\n      console.log('exit');\r\n        try {\r\n          await ipfs.pubsub.unsubscribe('block-added');\r\n          await ipfs.pubsub.unsubscribe('announce-transaction');\r\n          await ipfs.pubsub.unsubscribe('invalid-transaction');\r\n        } catch (e) {\r\n          console.log(e);\r\n        }\r\n    })\r\n    process.on('close', () => {\r\n      console.log('close');\r\n    })\r\n    process.on('SIGINT', async () => {\r\n      console.log(\"Caught interrupt signal\");\r\n      setTimeout(async () => {\r\n        process.exit();\r\n      }, 50);\r\n    });\r\n    const connection_now = Date.now();\r\n    bus.emit('stage-two');\r\n    groupCollapsed('Initialize', () => {\r\n      log(`ipfs daemon startup took: ${(ipfsd_now - now) / 1000} seconds`);\r\n      log(`connecting with bootstrap took: ${(bootstrap_now - ipfsd_now) / 1000} seconds`);\r\n      log(`signal server startup took: ${(signal_now - bootstrap_now) / 1000} seconds`);\r\n      log(`peer connection took: ${(connection_now - ipfsd_now) / 1000} seconds`);\r\n      log(`total load prep took ${(Date.now() - now) / 1000} seconds`);\r\n    })\r\n    // await write(configPath, JSON.stringify(config, null, '\\t'));\r\n    const chain = new DAGChain({ genesis, network, ipfs: api.ipfs });\r\n    await chain.init(genesis);\r\n    return chain;\r\n\t} catch (e) {\r\n    if (e.code === 'ECONNREFUSED' || e.message && e.message.includes('cannot acquire lock')) {\r\n      // await cleanRepo();\r\n      console.log('retrying');\r\n      // return core({ genesis, network });\r\n    }\r\n\t\tconsole.error(`load-error::${e}`);\r\n    // process.exit()\r\n\t}\r\n}\r\n",
     "static": true,
     "longname": "D:/Workspace-laptop/leofcoin/core/src/core.js",
     "access": "public",
@@ -1319,28 +1292,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 78,
-    "kind": "variable",
-    "name": "exec",
-    "memberof": "src/core.js",
-    "static": true,
-    "longname": "src/core.js~exec",
-    "access": "public",
-    "export": false,
-    "importPath": "@leofcoin/core/src/core.js",
-    "importStyle": null,
-    "description": null,
-    "lineNumber": 20,
-    "undocument": true,
-    "type": {
-      "types": [
-        "*"
-      ]
-    },
-    "ignore": true
-  },
-  {
-    "__docId__": 79,
+    "__docId__": 77,
     "kind": "function",
     "name": "core",
     "memberof": "src/core.js",
@@ -1373,7 +1325,7 @@
     }
   },
   {
-    "__docId__": 80,
+    "__docId__": 78,
     "kind": "file",
     "name": "src/difficulty.js",
     "content": "/**\r\n * Get hash difficulty\r\n *\r\n * @param hash\r\n * @return {Number}\r\n */\r\nexport default hash => {\r\n\treturn parseInt(hash.substring(0, 8), 16);\r\n};\r\n",
@@ -1384,7 +1336,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 81,
+    "__docId__": 79,
     "kind": "function",
     "name": "difficulty",
     "memberof": "src/difficulty.js",
@@ -1420,7 +1372,7 @@
     }
   },
   {
-    "__docId__": 82,
+    "__docId__": 80,
     "kind": "file",
     "name": "src/global-scope.js",
     "content": "import { LFCTx } from 'ipld-lfc-tx'\r\nimport {util, LFCNode} from 'ipld-lfc'\r\nimport { longestChain } from './lib/dagchain/dagchain-interface';\r\nimport { genesisCID, GENESISBLOCK, fixIndex } from './params'\r\nimport { log } from './utils';\r\n// import SocketClient from 'socket-request-client';\r\nimport { debug } from './utils'\r\n\r\nglobalThis.leofcoin = globalThis.leofcoin || {}\r\n\r\nconst sync = async () => {\r\n  try {\r\n    console.log(fixIndex);\r\n    if (fixIndex) {\r\n      await chainStore.put(0, genesisCID)\r\n      await chainStore.put('localBlock', genesisCID)\r\n      await chainStore.put('localIndex', 0)\r\n    }\r\n    console.log(await chainStore.get());\r\n    // console.log(await leofcoin.block.dag.get(\"zsNS6wZiHT3AuWEsd6sE6oPEcCnd2pWcNKPfNUofoEybxx57Y45N4xJKBAdZH1Uh8Wm3e1k2nNhhuSai9z3WAK6pHtpmjg\"));\r\n    const { localIndex, multihash } = await localBlock();\r\n    // const localIndex = await chainStore.get('localIndex')\r\n    // const c = await chainStore.get('localBlock')\r\n    ipfs.name.publish(multihash)\r\n    const { hash, index } = await longestChain();\r\n    console.log(index, localIndex, multihash);\r\n    if (index > Number(localIndex)) {\r\n      leofcoin.currentBlockHash = hash;  \r\n      leofcoin.currentBlockNode = await leofcoin.block.dag.get(leofcoin.currentBlockHash)\r\n    } else {\r\n      if (index === 0) leofcoin.currentBlockHash = genesisCID\r\n      else leofcoin.currentBlockHash = multihash || await localDAGMultiaddress();    \r\n        console.log('ge');\r\n      leofcoin.currentBlockNode = await leofcoin.block.dag.get(leofcoin.currentBlockHash)\r\n    }\r\n    \r\n    log(`current block hash : ${leofcoin.currentBlockHash}`);\r\n    log(`current block size: ${Math.round(Number(leofcoin.currentBlockNode.size) * 1e-6 * 100) / 100} Mb (${leofcoin.currentBlockNode.size} bytes)`);\r\n    return leofcoin.currentBlockHash\r\n  } catch (e) {\r\n    throw e\r\n  }\r\n}\r\n\r\nconst localBlock = async () => {\r\n  try {\r\n    const multihash = await chainStore.get('localBlock')\r\n    const index = await chainStore.get('localIndex')\r\n    // let multihash = await read(localCurrent, 'string'); // read local chain state\r\n    // const { value, remainderPath } = await ipfs.dag.get(multihash, { format: LFCNode.codec, hashAlg: LFCNode.defaultHashAlg, version: 1, pin: true});\r\n    \r\n    // const current = value\r\n    // const node = new LFCNode(current)\r\n    // \r\n    // probably recovering local chain\r\n    if (index === undefined) {\r\n      debug(`invalid block detected, recovering local chain`);\r\n      await chainStore.put('localBlock', genesisCID)\r\n      await chainStore.put('localIndex', 0)\r\n      return localBlock();\r\n    } else {        \r\n      debug(`current local block: ${index} - ${multihash}`);\r\n    }\r\n    return {\r\n      localIndex: index,\r\n      index,\r\n      multihash\r\n    }\r\n  } catch (e) {\r\n    console.log(e);\r\n    await chainStore.put('localBlock', genesisCID)\r\n    await chainStore.put('localIndex', 0)\r\n    return await localBlock();\r\n  }\r\n}\r\n\r\nconst resolveBlocks = async (node, index) => {\r\n  console.log(node.toString());\r\n  const cid = await util.cid(node.serialize())\r\n  chain[node.index] = node.toJSON();\r\n  chain[node.index].hash = cid.toBaseEncodedString()\r\n  leofcoin.hashMap.set(node.index, cid.toBaseEncodedString())\r\n  debug(`loaded block: ${node.index} - ${chain[node.index].hash}`);\r\n  if (node.prevHash !== Buffer.alloc(47).toString('hex')) {\r\n    debug('loading block')\r\n      node = await leofcoin.block.dag.get(node.prevHash)\r\n      if (node.index > index) {\r\n        await chainStore.put(node.index, leofcoin.hashMap.get(node.index))\r\n        debug(`added block: ${node.index}`);\r\n      }\r\n    // }\r\n    try {\r\n      // store them in memory\r\n      // global.blockHashSet[hash] = block.index;\r\n      if (node.prevHash && node.prevHash !== Buffer.alloc(47).toString('hex')) {\r\n\r\n        return resolveBlocks(node, index);\r\n      }\r\n      return;\r\n    } catch (e) {\r\n      console.error(e);\r\n    }\r\n  }\r\n  return\r\n}\r\n/**\r\n * last resolved, mined or minted block\r\n *\r\n * @param {object} cid - cid instance or baseEncodedString \r\n */\r\nconst updateLocals = async (cid, index) => {\r\n  if (cid.isCid && cid.isCid()) cid = cid.toBaseEncodedString();\r\n  \r\n  \r\n  try {\r\n    debug(`updating chainStore to ${index}`);\r\n    await chainStore.put(index, cid)\r\n    debug(`writing cid ${cid} to chainStore`);\r\n    await chainStore.put('localBlock', cid)\r\n    debug(`writing index ${index} to chainStore`);\r\n    await chainStore.put('localIndex', index)\r\n  } catch (error) {\r\n    throw error\r\n  }\r\n    \r\n}\r\n\r\nconst resync = async (block) => {\r\n  try {\r\n    // global.states.syncing = true;\r\n    // bus.emit('syncing', true);\r\n    if (!block) {\r\n      await leofcoin.chain.sync();\r\n    } else {\r\n      leofcoin.currentBlockNode = new LFCNode(block)\r\n      leofcoin.currentBlockHash = leofcoin.currentBlockNode.hash\r\n    }\r\n    debug(leofcoin.currentBlockNode.toString())\r\n    if (leofcoin.currentBlockNode) {\r\n      const { index, multihash } = await localBlock();\r\n      debug(`local block index: ${index}`)\r\n      const height = leofcoin.currentBlockNode.index\r\n      let syncCount = height - index;\r\n      debug(`local chain height: ${index}`);\r\n      debug(`network chain height: ${height}`);\r\n      debug(`syncing ${syncCount > 0 ? syncCount : 0} block(s)`)\r\n      // whenever prevHash is undefined & syncCount is zero or lower\r\n      // write latest network chain to locals\r\n      const start = Date.now();\r\n      if (index > height) {\r\n        const value = await leofcoin.block.dag.get(multihash)\r\n        await resolveBlocks(value, index);\r\n      }\r\n      else await resolveBlocks(leofcoin.currentBlockNode, height);\r\n      const end = Date.now();\r\n      const time = end - start;\r\n      debug(time / 1000);\r\n      if (syncCount > 0) {\r\n        await updateLocals(chain[leofcoin.currentBlockNode.index].hash, height);\r\n      }\r\n    } else {\r\n      chain[0] = GENESISBLOCK\r\n      chain[0].index = 0;\r\n      chain[0].hash = genesisCID;\r\n    }\r\n  } catch (e) {\r\n    chain[0] = GENESISBLOCK\r\n    chain[0].index = 0;\r\n    chain[0].hash = genesisCID;\r\n    await updateLocals(genesisCID, 0)\r\n    console.error('syncChain', e);\r\n  }\r\n  return;\r\n}\r\n\r\nconst timedRequest = (request) => new Promise(async (resolve, reject) => {\r\n  setTimeout(() => {\r\n    reject('request timeout')\r\n  }, 60000);\r\n  const requested = await request\r\n  resolve(requested)\r\n});\r\n\r\nexport default class GlobalScope {\r\n  constructor(api) {\r\n    globalThis.api = api\r\n    return this._init(api)\r\n  }\r\n  \r\n  async _init({discoClientMap, ipfs, peerId, discoServer}) {\r\n    // this.discoServer = discoServer\r\n    // globalThis.pubsubRequest = await new PubsubRequest({ipfs, peerId}, this.api)\r\n    globalThis.peerId = peerId\r\n    globalThis.ipfs = ipfs\r\n    globalThis.getTx = async multihash => ipfs.dag.get(multihash, { format: LFCTx.codec, hashAlg: LFCTx.defaultHashAlg, vesion: 1, baseFormat: 'base58btc' })\r\n    leofcoin.sync = sync\r\n    leofcoin.dial = async (addr, protocol = 'disco') => {\r\n      // peer already connected\r\n      // if () return\r\n      console.log(addr);\r\n      // connect\r\n      // await SocketClient(addr, protocol)\r\n      // blacklist after \"amount\" attempts\r\n    }\r\n    // leofcoin.peers = this.discoServer.connections\r\n    // leofcoin.peerMap = this.discoServer.peerMap\r\n    // leofcoin.discoClientMap = discoClientMap\r\n    leofcoin.request = async (url, params) => {\r\n      const requests = []\r\n      for (const connection of leofcoin.peers.values()) {\r\n        if (connection.request) {\r\n          requests.push(connection.request({url, params}))\r\n        }\r\n      }\r\n      // get request as soon as possible\r\n      return Promise.race(requests)\r\n    }\r\n    leofcoin.block = {\r\n      get: async multihash => {\r\n        const node = await leofcoin.block.dag.get(multihash)\r\n        return node.toJSON()\r\n      },\r\n      dag: {\r\n        get: async multihash => {\r\n          try {\r\n            const { value } = await ipfs.dag.get(multihash)\r\n            value.transactions = [...value.transactions]\r\n            return new LFCNode({...value})\r\n          } catch (e) {\r\n            throw e\r\n          }\r\n        }\r\n      }\r\n    }\r\n    leofcoin.message = {\r\n      get: async multihash => {\r\n        const node = await leofcoin.block.dag.get(multihash)\r\n        return node.toJSON()\r\n      },\r\n      dag: {\r\n        get: async multihash => {\r\n          const { value, remainderPath } = await ipfs.dag.get(multihash, { format: LFCNode.codec, hashAlg: LFCNode.defaultHashAlg, vesion: 1, baseFormat: 'base58btc'})\r\n          value.transactions = [...value.transactions]\r\n          return new LFCNode({...value})\r\n        }\r\n      }\r\n    }\r\n    leofcoin.pin = {\r\n      add: async hash => await ipfs.pin.add(hash),\r\n      rm: async hash => await ipfs.pin.rm(hash)\r\n    }\r\n    leofcoin.transaction = {\r\n      get: async multihash => {\r\n        const node = await leofcoin.transaction.dag.get(multihash)\r\n        return node.toJSON()\r\n      },\r\n      dag: {\r\n        get: async multihash => {\r\n          const {value} = await ipfs.dag.get(multihash, { format: LFCTx.codec, hashAlg: LFCTx.defaultHashAlg, vesion: 1, baseFormat: 'base58btc' })\r\n          return new LFCTx(value)\r\n        },\r\n        put: async node => {\r\n          await ipfs.dag.put(node, { format: 'leofcoin-tx', hashAlg: 'keccak-256', version: 1})\r\n          return\r\n        }\r\n      }\r\n    }\r\n    leofcoin.hashMap = new Map()\r\n    leofcoin.chain = {\r\n      sync: sync,\r\n      resync: resync,\r\n      updateLocals:  updateLocals,\r\n      get: async hash => {\r\n        if (!hash) {\r\n          const blocks = []\r\n          for (const [index, multihash] of leofcoin.hashMap.entries()) {\r\n            const block = await leofcoin.block.dag.get(multihash)\r\n            const _transactions = []\r\n            for (const {multihash} of block.transactions) {\r\n              const transaction = await leofcoin.transaction.get(multihash)\r\n              _transactions.push(transaction)\r\n            }\r\n            block.transactions = _transactions\r\n            blocks[index] = block\r\n          }\r\n          return blocks\r\n        }\r\n        if (!isNaN(hash)) hash = await leofcoin.hashMap.get(hash)\r\n        return leofcoin.block.get(hash)\r\n      },\r\n      dag: {\r\n        get: async hash => {\r\n          if (!hash) {\r\n            const blocks = []\r\n            for (const [index, multihash] of leofcoin.hashMap.entries()) {\r\n              const block = await leofcoin.block.dag.get(multihash)\r\n              blocks[index] = block\r\n            }\r\n            return blocks\r\n          }\r\n          if (!isNaN(hash)) hash = await leofcoin.hashMap.get(hash)\r\n          \r\n          return leofcoin.block.dag.get(hash)\r\n        }\r\n      }\r\n    }\r\n    \r\n    leofcoin.pubsub = {\r\n      publish: async (topic, value) => {\r\n        for (const connection of this.discoServer.connections.values()) {\r\n          if (connection.pubsub) {\r\n            await connection.pubsub.publish(topic, value)\r\n          }\r\n        }\r\n        return\r\n      },\r\n      subscribe: async (topic, handler) => {\r\n        for (const connection of this.discoServer.connections.values()) {\r\n          if (connection.pubsub) {\r\n            await connection.pubsub.subscribe(topic, handler)\r\n          }\r\n        }\r\n        return\r\n      },\r\n      unsubscribe: async (topic, handler) => {\r\n        for (const connection of this.discoServer.connections.values()) {\r\n          if (connection.pubsub) {\r\n            await connection.pubsub.unsubscribe(topic, handler)\r\n          }\r\n        }\r\n        return\r\n      }\r\n    }\r\n  }\r\n    \r\n  get api() {\r\n    return {\r\n      chainHeight: () => (globalThis.chain.length - 1),\r\n      blockHash: ({value}) => {\r\n        return globalThis.chain[value].hash\r\n      },\r\n      lastBlock: () => {\r\n        const index = (globalThis.chain.length - 1)\r\n        return globalThis.chain[index]\r\n      } \r\n    }    \r\n  }\r\n}\r\n",
@@ -1431,7 +1383,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 83,
+    "__docId__": 81,
     "kind": "function",
     "name": "sync",
     "memberof": "src/global-scope.js",
@@ -1455,7 +1407,7 @@
     "ignore": true
   },
   {
-    "__docId__": 84,
+    "__docId__": 82,
     "kind": "function",
     "name": "localBlock",
     "memberof": "src/global-scope.js",
@@ -1479,7 +1431,7 @@
     "ignore": true
   },
   {
-    "__docId__": 85,
+    "__docId__": 83,
     "kind": "function",
     "name": "resolveBlocks",
     "memberof": "src/global-scope.js",
@@ -1516,7 +1468,7 @@
     "ignore": true
   },
   {
-    "__docId__": 86,
+    "__docId__": 84,
     "kind": "function",
     "name": "updateLocals",
     "memberof": "src/global-scope.js",
@@ -1546,7 +1498,7 @@
     "ignore": true
   },
   {
-    "__docId__": 87,
+    "__docId__": 85,
     "kind": "function",
     "name": "resync",
     "memberof": "src/global-scope.js",
@@ -1573,7 +1525,7 @@
     "ignore": true
   },
   {
-    "__docId__": 88,
+    "__docId__": 86,
     "kind": "function",
     "name": "timedRequest",
     "memberof": "src/global-scope.js",
@@ -1600,7 +1552,7 @@
     "ignore": true
   },
   {
-    "__docId__": 89,
+    "__docId__": 87,
     "kind": "class",
     "name": "GlobalScope",
     "memberof": "src/global-scope.js",
@@ -1616,7 +1568,7 @@
     "interface": false
   },
   {
-    "__docId__": 90,
+    "__docId__": 88,
     "kind": "constructor",
     "name": "constructor",
     "memberof": "src/global-scope.js~GlobalScope",
@@ -1630,7 +1582,7 @@
     "undocument": true
   },
   {
-    "__docId__": 91,
+    "__docId__": 89,
     "kind": "method",
     "name": "_init",
     "memberof": "src/global-scope.js~GlobalScope",
@@ -1660,7 +1612,7 @@
     "return": null
   },
   {
-    "__docId__": 92,
+    "__docId__": 90,
     "kind": "get",
     "name": "api",
     "memberof": "src/global-scope.js~GlobalScope",
@@ -1679,7 +1631,7 @@
     }
   },
   {
-    "__docId__": 93,
+    "__docId__": 91,
     "kind": "file",
     "name": "src/index.js",
     "content": "import classIs from 'class-is';\r\nimport { serialize, deserialize } from './../util';\r\nimport LFCTransactionLink from './../lfc-transaction-link/index';\r\n\r\nexport default classIs(class LFCNode {\r\n  get _keys() {\r\n    return ['index', 'prevHash', 'time', 'transactions', 'nonce']\r\n  }\r\n  constructor(block) {\r\n    \r\n    if (Buffer.isBuffer(block)) {\r\n      this._defineBlock(deserialize(block))\r\n    } else if (block) {\r\n      this._defineBlock(block)\r\n    }\r\n  }\r\n  \r\n  serialize() {\r\n    return serialize(this._keys.reduce((p, c) => {\r\n      p[c] = this[c]\r\n      return p\r\n    }, {}))\r\n  }\r\n  \r\n  _defineBlock(block) {\r\n    return this._keys.forEach(key => {\r\n      if (key === 'transactions') {\r\n        block[key] = block[key].map(tx => new LFCTransactionLink(tx))\r\n      }\r\n      Object.defineProperty(this, key, {\r\n        value: block[key],\r\n        writable: false\r\n      })\r\n    })\r\n  }\r\n  \r\n  toJSON() {\r\n    return this._keys.reduce((p, c) => {\r\n      if (c === 'transactions') p[c] = this[c].map(tx => tx.toJSON())\r\n      else p[c] = this[c]\r\n      return p\r\n    }, {})\r\n  }\r\n  \r\n  toString () {\r\n    return `LFCNode <index: \"${this.index.toString()}\", prevHash: \"${this.prevHash.toString('hex')}\", time: \"${this.time.toString()}\", nonce: \"${this.nonce.toString()}\", transactions: \"${this.transactions.length}\", size: ${this.size}>`\r\n  }\r\n  \r\n  get size () {\r\n    return this.transactions.reduce((p, c) => p + c.size, this.serialize().length)\r\n  }\r\n}, { className: 'LFCNode', symbolName: '@leofcoin/ipld-lfc/lfc-node'})",
@@ -1690,7 +1642,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 94,
+    "__docId__": 92,
     "kind": "file",
     "name": "src/lib/bus.js",
     "content": "import EventEmitter from 'events';\r\n\r\nclass Emitter extends EventEmitter {\r\n\tconstructor() {\r\n\t\tsuper();\r\n\t}\n  on(event, func) {\n    // EventEmitter returns heavy object that we don't want to\n    // send over the wire.\n    super.on(event, func);\n  }\n\n  emit(event, value) {\n    // EventEmitter returns heavy object that we don't want to\n    // send over the wire.\n    super.emit(event, value);\n  }\r\n}\r\n\r\nexport default new Emitter();\r\n",
@@ -1701,7 +1653,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 95,
+    "__docId__": 93,
     "kind": "class",
     "name": "Emitter",
     "memberof": "src/lib/bus.js",
@@ -1721,7 +1673,7 @@
     ]
   },
   {
-    "__docId__": 96,
+    "__docId__": 94,
     "kind": "constructor",
     "name": "constructor",
     "memberof": "src/lib/bus.js~Emitter",
@@ -1735,7 +1687,7 @@
     "undocument": true
   },
   {
-    "__docId__": 97,
+    "__docId__": 95,
     "kind": "method",
     "name": "on",
     "memberof": "src/lib/bus.js~Emitter",
@@ -1764,7 +1716,7 @@
     "return": null
   },
   {
-    "__docId__": 98,
+    "__docId__": 96,
     "kind": "method",
     "name": "emit",
     "memberof": "src/lib/bus.js~Emitter",
@@ -1793,7 +1745,7 @@
     "return": null
   },
   {
-    "__docId__": 99,
+    "__docId__": 97,
     "kind": "variable",
     "name": "emitter",
     "memberof": "src/lib/bus.js",
@@ -1813,7 +1765,7 @@
     }
   },
   {
-    "__docId__": 100,
+    "__docId__": 98,
     "kind": "file",
     "name": "src/lib/dagchain/calculate-hash.js",
     "content": "import ipldLfc from 'ipld-lfc';\r\nimport hashFromMultihash from './../../utils/hash-from-multihash.js'\r\nconst { LFCNode, util } = ipldLfc\r\nexport default async block => {\r\n  block = await new LFCNode(block);\r\n  const cid = await util.cid(block.serialize())\r\n  return hashFromMultihash(cid.toBaseEncodedString());\r\n}\r\n",
@@ -1824,7 +1776,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 101,
+    "__docId__": 99,
     "kind": "variable",
     "name": "LFCNode",
     "memberof": "src/lib/dagchain/calculate-hash.js",
@@ -1845,7 +1797,7 @@
     "ignore": true
   },
   {
-    "__docId__": 102,
+    "__docId__": 100,
     "kind": "function",
     "name": "calculatehash",
     "memberof": "src/lib/dagchain/calculate-hash.js",
@@ -1875,7 +1827,7 @@
     }
   },
   {
-    "__docId__": 103,
+    "__docId__": 101,
     "kind": "file",
     "name": "src/lib/dagchain/dagblock.js",
     "content": "import { validateTransactions, createRewardTransaction } from './../transaction';\r\nimport { getDifficulty, hashFromMultihash } from './../../utils';\r\nimport { isValid } from './../network/validate.js';\r\nimport { BlockError } from '../errors';\r\nimport calculateHash from  './calculate-hash';\r\n\r\n\r\nclass DAGBlock {\r\n\tconstructor(ipfs, options) {\r\n    if (!ipfs) return console.warn('options and ipfs expected');\r\n\r\n\t\tthis.ipfs = ipfs\n\r\n\t\t// if (typeof options === 'object' && !Buffer.isBuffer(options)) this.newBlock(options);\r\n\t\t// else this.get(options);\r\n\t}\r\n\r\n\t/**\r\n\t * Create new block\r\n\t *\r\n\t * @param transactions {array}\r\n\t * @param previousBlock {object}\r\n\t * @param address {string}\r\n\t * @return {index, prevHash, time, transactions, nonce}\r\n\t */\r\n\tasync newBlock({transactions = [], previousBlock, address}) {\r\n\t\tconst index = previousBlock.index + 1\r\n\t\tconst minedTx = await createRewardTransaction(address, index)\r\n\t\ttransactions.push(minedTx);\r\n\t\tthis.data = {\r\n\t\t\tindex,\r\n\t\t\tprevHash: previousBlock.hash,\r\n\t\t\ttime: Math.floor(new Date().getTime() / 1000),\r\n\t\t\ttransactions,\r\n\t\t\tnonce: 0\r\n\t\t};\r\n\t\tthis.data.hash = await calculateHash(this.data);\r\n\t\treturn this.data;\r\n\t}\r\n\ttransformBlock({data, size}, cid) {\r\n\t  data = JSON.parse(data.toString());\n    data.size = size;\r\n\t  return data;\r\n\t};\n  // TODO: split into header and block\n  /**\n   * get header only\n   */\n  async getHeader(hash) {\n    this.node = await this.ipfs.dag.get(hash)\n    return this.node.value;\n  }\n  /**\n   * get block only\n   */\n  async getBlock() {\n\n  }\n\n  /**\n   * combines getHeader & getBlock\n   */\r\n\tasync get(multihash) {\r\n\t\tthis.node = await this.ipfs.dag.get(multihash);\n\t\tthis.data = JSON.parse(this.node.value.data.toString());\n\t\tthis.data.hash = hashFromMultihash(multihash);\n    return this.data;\r\n\t}\r\n}\r\n\r\n/**\r\n * validate block\r\n *\r\n * @param {object} previousBlock\r\n * @param {object} block\r\n * @param {number} difficulty\r\n * @param {number} unspent\r\n */\r\nconst validate = async (previousBlock, block, difficulty, unspent) => {\r\n\tconsole.log(previousBlock.hash, block.prevHash);\r\n\tconsole.log(previousBlock, block);\r\n\t// console.log(await calculateHash(), block.hash);\r\n\tconsole.log(isValid('block', block));\r\n\tif (!isValid('block', block)) throw BlockError('data');\r\n\t// console.log(block, previousBlock);\r\n\tif (previousBlock.index + 1 !== block.index) throw BlockError('index');\r\n\tif (previousBlock.hash !== block.prevHash) throw BlockError('prevhash');\r\n\tif (await calculateHash(block) !== block.hash) throw BlockError('hash');\r\n\tif (getDifficulty(block.hash) > difficulty) throw BlockError('difficulty');\r\n\treturn validateTransactions(block.transactions, unspent);\r\n};\r\n\r\nexport {\r\n  DAGBlock,\r\n  validate\r\n};\r\n",
@@ -1886,7 +1838,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 104,
+    "__docId__": 102,
     "kind": "class",
     "name": "DAGBlock",
     "memberof": "src/lib/dagchain/dagblock.js",
@@ -1902,7 +1854,7 @@
     "interface": false
   },
   {
-    "__docId__": 105,
+    "__docId__": 103,
     "kind": "constructor",
     "name": "constructor",
     "memberof": "src/lib/dagchain/dagblock.js~DAGBlock",
@@ -1916,7 +1868,7 @@
     "undocument": true
   },
   {
-    "__docId__": 106,
+    "__docId__": 104,
     "kind": "member",
     "name": "ipfs",
     "memberof": "src/lib/dagchain/dagblock.js~DAGBlock",
@@ -1933,7 +1885,7 @@
     }
   },
   {
-    "__docId__": 107,
+    "__docId__": 105,
     "kind": "method",
     "name": "newBlock",
     "memberof": "src/lib/dagchain/dagblock.js~DAGBlock",
@@ -1986,7 +1938,7 @@
     }
   },
   {
-    "__docId__": 108,
+    "__docId__": 106,
     "kind": "member",
     "name": "data",
     "memberof": "src/lib/dagchain/dagblock.js~DAGBlock",
@@ -2003,7 +1955,7 @@
     }
   },
   {
-    "__docId__": 109,
+    "__docId__": 107,
     "kind": "method",
     "name": "transformBlock",
     "memberof": "src/lib/dagchain/dagblock.js~DAGBlock",
@@ -2041,7 +1993,7 @@
     }
   },
   {
-    "__docId__": 110,
+    "__docId__": 108,
     "kind": "method",
     "name": "getHeader",
     "memberof": "src/lib/dagchain/dagblock.js~DAGBlock",
@@ -2067,7 +2019,7 @@
     }
   },
   {
-    "__docId__": 111,
+    "__docId__": 109,
     "kind": "member",
     "name": "node",
     "memberof": "src/lib/dagchain/dagblock.js~DAGBlock",
@@ -2084,7 +2036,7 @@
     }
   },
   {
-    "__docId__": 112,
+    "__docId__": 110,
     "kind": "method",
     "name": "getBlock",
     "memberof": "src/lib/dagchain/dagblock.js~DAGBlock",
@@ -2099,7 +2051,7 @@
     "return": null
   },
   {
-    "__docId__": 113,
+    "__docId__": 111,
     "kind": "method",
     "name": "get",
     "memberof": "src/lib/dagchain/dagblock.js~DAGBlock",
@@ -2125,7 +2077,7 @@
     }
   },
   {
-    "__docId__": 116,
+    "__docId__": 114,
     "kind": "function",
     "name": "validate",
     "memberof": "src/lib/dagchain/dagblock.js",
@@ -2188,7 +2140,7 @@
     }
   },
   {
-    "__docId__": 117,
+    "__docId__": 115,
     "kind": "file",
     "name": "src/lib/dagchain/dagchain-interface.js",
     "content": "import { config, median, multihashFromHex, hashFromMultihash, debug } from './../../utils';\r\nimport { validateTransaction, consensusSubsidy } from './../transaction.js';\r\nimport { TransactionError } from './../errors.js';\r\nimport { DAGBlock, validate } from './dagblock';\r\nimport { encode, decode } from 'bs58';\r\nimport { GENESISBLOCK, genesisCID } from '../../params';\r\nimport calculateHash from  './calculate-hash';\nimport ipldLfc from 'ipld-lfc';\r\n\r\nconst { LFCNode, util } = ipldLfc\r\n\r\nconst invalidTransactions = {};\r\n\r\nglobal.chain = global.chain || [\r\n  GENESISBLOCK\r\n];\r\nglobal.mempool = global.mempool || [];\r\nglobal.blockHashSet = global.blockHashSet || [];\r\n\r\nexport const chain = (() => global.chain)();\r\n\r\nexport const mempool = (() => global.mempool)();\r\n\r\nexport const blockHashSet = (() => global.blockHashSet)();\r\n\r\n// TODO: needs 3 nodes running\r\nexport const invalidTransaction = data => {\r\n  // console.log(data.data.toString());\r\n  data = JSON.parse(data.data.toString());\r\n  if (!invalidTransactions[data.tx]) invalidTransactions[data.tx] = 0;\r\n  ++invalidTransactions[data.tx]\r\n  const count = invalidTransactions[data.tx];\r\n  if (count === 3) {\r\n    const memIndex = mempool.indexOf(data)\r\n    mempool.splice(memIndex, 1)\r\n    delete invalidTransactions[data.tx];\r\n  }\r\n}\r\n\r\n/**\r\n * Get the transactions for the next Block\r\n *\r\n * @return {object} transactions\r\n */\r\nexport const nextBlockTransactions = async () => {\r\n\tconst unspent = await getUnspent(false);\r\n\treturn mempool.filter(async (transaction) => {\r\n    const multihash = transaction.multihash\r\n    const value = await leofcoin.transaction.get(multihash)\r\n    console.log({value});\r\n\t\ttry {\r\n\t\t\tawait validateTransaction(multihash, value, unspent);\r\n      return transaction\r\n\t\t} catch (e) {\r\n      // TODO: push to pubus\r\n      global.ipfs.pubsub.publish('invalid-transaction', new Buffer.from(JSON.stringify(transaction)));\r\n\t\t\tconsole.error(e);\r\n\t\t}\r\n\t});\r\n};\r\n\r\nexport const getTransactions = async (withMempool = true, index = 0) => {\r\n  const _chain = [...chain];\r\n  _chain.slice(index, chain.length)\r\n\tlet transactions = _chain.reduce((transactions, block) => [ ...transactions, ...block.transactions], []);\r\n\tif (withMempool) transactions = transactions.concat(mempool);\n  let _transactions = []\n  for (const tx of transactions) {\n    const {multihash} = tx\n    if (multihash) {\n      const {value} = await global.ipfs.dag.get(multihash, {format: LFCNode.codec, hashAlg: LFCNode.faultHashAlg, version: 1, baseFormat: 'base58btc'})\n      _transactions.push(value)\n    } else {\n      _transactions.push(tx)\n    }\n    \n  }\n  return _transactions\r\n};\r\n\r\nexport const getTransactionsForAddress = async (address, index = 0) => {\n  const transactions = await getTransactions(false, index);\r\n\treturn transactions.filter(tx => tx.inputs.find(i => i.address === address) ||\r\n  tx.outputs.find(o => o.address === address));\r\n};\r\n\r\nexport const getUnspent = async (withMempool = false, index = 0) => {\r\n\tconst transactions = await getTransactions(withMempool, index);\r\n\t// Find all inputs with their tx ids\r\n\tconst inputs = transactions.reduce((inputs, tx) => inputs.concat(tx.inputs), []);\r\n\r\n\t// Find all outputs with their tx ids\r\n\tconst outputs = transactions.reduce((outputs, tx) =>\r\n\t\toutputs.concat(tx.outputs.map(output => Object.assign({}, output, {tx: tx.id}))), []);\r\n\r\n\t// Figure out which outputs are unspent\r\n\tconst unspent = outputs.filter(output =>\r\n\t\ttypeof inputs.find(input => input.tx === output.tx && input.index === output.index && input.amount === output.amount) === 'undefined');\r\n\treturn unspent;\r\n};\r\nexport const getUnspentForAddress = async (address, index = 0) => {\n  const unspent = await getUnspent(true, index)\r\n\treturn unspent.filter(u => u.address === address);\r\n};\r\nexport const getBalanceForAddress = async address => {\n  debug(`Getting balance for ${address}`)\n  const unspent = await getUnspentForAddress(address)\r\n  const amount = unspent.reduce((acc, u) => acc + u.amount , 0);\r\n  debug(`Got ${amount} for ${address}`)\r\n\treturn amount\r\n};\r\nexport const getBalanceForAddressAfter = async (address, index) => {\n  debug(`Getting balance for ${address} @${index}`)\n  const unspent = await getUnspentForAddress(address, index)\r\n  const amount = unspent.reduce((acc, u) => acc + u.amount , 0);\r\n  debug(`Got ${amount} for ${address} @${index}`)\r\n  return amount\r\n}\r\nexport const difficulty = () => {\r\n\t// TODO: lower difficulty when transactionpool contain more then 500 tx ?\r\n\t// TODO: raise difficulty when pool is empty\r\n\r\n  // or\r\n\r\n  // TODO: implement iTX (instant transaction)\r\n  // iTX is handled by multiple peers, itx is chained together by their hashes\r\n  // by handlng a tx as itx the block well be converted into a iRootBlock\r\n  // this results into smaller chains (tangles, tails) which should improve\r\n  // resolving transactions, wallet amounts etc ...\r\n\tconst start = chain.length >= 128 ? (chain.length - 128) : 0;\r\n\tconst blocks = chain.slice(start, (chain.length - 1)).reverse();\r\n\tconst stamps = [];\r\n\tfor (var i = 0; i < blocks.length; i++) {\r\n\t\tif (blocks[i + 1]) {\r\n\t\t\tstamps.push(blocks[i].time - blocks[i + 1].time);\r\n\t\t}\r\n\t}\r\n\tif (stamps.length === 0) {\r\n\t\tstamps.push(30);\r\n\t}\r\n\tlet blocksMedian = median(stamps) || 30;\r\n  const offset = blocksMedian / 30\r\n   // offset for quick recovery\r\n\tif (blocksMedian < 30) {\r\n\t\tblocksMedian -= (offset / 2);\r\n\t} else if (blocksMedian > 30) {\r\n\t\tblocksMedian += (offset * 2);\r\n\t}\n  if (blocksMedian < 0) blocksMedian = -blocksMedian\r\n  console.log(`Average Block Time: ${blocksMedian}`);\r\n  console.log(`Difficulty: ${30 / blocksMedian}`);\r\n\treturn ((100000 / ((30 / blocksMedian) * 100)) * 3); // should result in a block every 10 seconds\r\n};//10000\r\n\r\nexport const transformBlock = ({multihash, data}) => {\r\n  data = JSON.parse(data.toString());\r\n  data.hash = hashFromMultihash(multihash);\r\n  return data;\r\n};\r\n\r\nconst timedRequest = (peer, request) => new Promise(async (resolve, reject) => {\r\n  setTimeout(() => {\r\n    reject()\r\n  }, 1000);\r\n  const requested = await peer.request(request)\r\n  resolve(requested)\r\n});\r\n\r\nconst readyState = (state) => {\r\n  switch (state) {\r\n    case 0:\r\n      return 'connecting'\r\n      break;\r\n    case 1:\r\n      return 'open'\r\n      break;\r\n    case 2:\r\n      return 'closing'\r\n      break;\r\n    case 3:\r\n      return 'closed'\r\n      break;\r\n  }\r\n}\r\n\r\nconst connectAfterClose = client => new Promise(async (resolve, reject) => {\r\n  if (readyState(client.readyState) === 'closed') {\r\n    await leofcoin.dial(client.url)\r\n    resolve()\r\n  } else if (readyState(client.readyState) === 'closing') setTimeout(async () => {\r\n    await connectAfterClose(client)\r\n    resolve()\r\n  }, 1000);\r\n})\r\n\r\nconst filterPeers = (peers, localPeer) => {\r\n  const set = []\r\n  return peers.reduce((p, c) => {\r\n    if (set.indexOf(c.peer) === -1 && c.peer !== localPeer) {\r\n      set.push(c.peer)\r\n      p.push(c)\r\n    }\r\n    return p\r\n  }, [])\r\n}\r\n\r\n// TODO: global peerlist\r\nexport const longestChain = () => new Promise(async (resolve, reject) => {\r\n  \r\n  try {\r\n    let peers = await ipfs.swarm.peers()\r\n    console.log(peers);\r\n    peers = await filterPeers(peers, globalThis.peerId)\r\n    console.log(peers);\r\n    // if (peers.length < 2) return setTimeout(async () => {\r\n    //   const res = await longestChain()\r\n    //   resolve(res)\r\n    // }, 100);\r\n    \r\n    const set = []\r\n    for (const {peer} of peers) {\r\n      const chunks = []\r\n      try {\r\n        for await (const chunk of ipfs.name.resolve(peer)) {\r\n          chunks.push(chunk)\r\n        }\r\n      } catch (e) {\r\n        console.warn(e)\r\n      }\r\n      if (chunks.length > 0) set.push({peer, path: chunks});\r\n    }\r\n    const _peers = []\r\n    let _blocks = []\r\n    for (const {peer, path} of set) {    \r\n      if (_peers.indexOf(peer) === -1) {\r\n        _peers.push(peer)\r\n        const block = await leofcoin.block.dag.get(path[0] || path)      \r\n        _blocks.push({block, path: path[0] || path})        \r\n      }        \r\n    }\r\n    const localIndex = await chainStore.get('localIndex')\r\n    const localHash = await chainStore.get('localBlock')\r\n    console.log({localHash});\r\n    const history = {}\r\n    _blocks = _blocks.reduce((set, {block, path}) => {\r\n      if (set.block.index < block.index) {\r\n        history[set.block.index] = set;\r\n        set.block = block\r\n        set.hash = path.replace('/ipfs/', '')\r\n        set.seen = 1\r\n      } else if (set.block.index === block.index) {\r\n        set.seen = Number(set.seen) + 1\r\n      }\r\n      return set\r\n    }, {block: { index: localIndex }, hash: localHash, seen: 0})\r\n    // temp \r\n    // if (_blocks.seen < 2) {\r\n    //   _blocks = history[_blocks.block.index - 1]\r\n    // \r\n    // }\r\n    // const localIndex = await chainStore.get('localIndex')\r\n    // const localHash = await chainStore.get('localBlock')\r\n    return resolve({index: _blocks.block.index, hash: _blocks.hash})\r\n    \r\n  } catch (e) {\r\n    console.warn(e);\r\n    debug(e)\r\n    reject(e)\r\n  }\r\n  // return resolve({index: 0, hash: genesisCID})\r\n  // try {\r\n  //   if (!globalThis.ipfs) return\r\n  //   // console.log(peerMap.entries());\r\n  //   let addresses = await global.ipfs.swarm.peers();\n  //   addresses = addresses.map(({peer}) => peer.toB58String());\r\n  //   if (addresses.length < 1) return resolve(setTimeout(async () => {\r\n  //     return await longestChain()\r\n  //   }, 2000));\r\n  //   addresses = addresses.filter((id) => id !== 'QmQRRacFueH9iKgUnHdwYvnC4jCwJLxcPhBmZapq6Xh1rF')\r\n  //   let stat = {\r\n  //     index: 0,\r\n  //     hash: genesisCID\r\n  //   };\r\n  //   for (const addr of addresses) {\r\n  //     await ipfs.swarm.connect(`/p2p-circuit/ipfs/${addr}`)\r\n  //     const value = await globalThis.pubsubRequest.request('chainHeight', addr)\r\n  //     if (stat.index < value) {\r\n  //       stat = {\r\n  //         index: value,\r\n  //         addr\r\n  //       }\r\n  //     }      \r\n  //   }\r\n  //   // reduce to longest chain\r\n  //   // TODO: consider using candidates for validating\r\n  //   // canditates.push({hash, height})\r\n  //   // if c.height > p.height => newCanditatesSet ...\r\n  //   if (stat.addr) {\r\n  //     const hash = await globalThis.pubsubRequest.request('blockHash', stat.addr, stat.index)\r\n  //     return resolve({ index: stat.index, hash });  \r\n  //   }\r\n  //   resolve({index: 0, hash: genesisCID})\r\n  // } catch (e) {\r\n  //   reject(e);\r\n  // }\r\n});\r\n\r\nexport const lastBlock = () => new Promise(async (resolve, reject) => {\r\n  // setTimeout(async () => {\r\n  //   const hash = leofcoin.hashMap.get(leofcoin.hashMap.size - 1)\r\n  //   console.log(leofcoin.hashMap.get(leofcoin.hashMap.size - 1));\r\n  //   console.log(hash);\r\n  //   const {index} = await leofcoin.block.get(hash)\r\n  //   console.log(index);\r\n  //   resolve({hash, index})\r\n  // }, 1000);\r\n  const result = await longestChain();\r\n  \r\n  resolve(result); // retrieve links\r\n});\r\n\r\nexport const nextBlock = async address => {\r\n  let transactions;\r\n  let previousBlock;\r\n  try {\n    previousBlock = await lastBlock()\n    console.log({previousBlock});\n    if (previousBlock.index > chain.length - 1) {\r\n      await leofcoin.chain.sync()\r\n      previousBlock = await lastBlock()\r\n    }\r\n    if (!previousBlock.index) previousBlock = chain[chain.length - 1]\r\n    // previousBlock = chain[chain.length - 1]; // TODO: await lastBlock\r\n    transactions = await nextBlockTransactions();\r\n  } catch (e) {\n    console.log(e);\r\n    previousBlock = GENESISBLOCK\r\n    previousBlock.hash = genesisCID\r\n    transactions = await nextBlockTransactions();\r\n  } finally {\r\n    // console.log(transactions, previousBlock, address);\r\n    return await new DAGBlock(global.ipfs).newBlock({transactions, previousBlock, address});\r\n  }\r\n};\n\nconst goodBlock = (block, difficulty) => new Promise(async (resolve, reject) => {\n  // return setTimeout(async () => {\n    block.hash = await calculateHash(block);\n    if (parseInt(block.hash.substring(0, 8), 16) >= difficulty) {\n      block.nonce++\n      block = await goodBlock(block, difficulty)\n    }      \n    resolve(block)\n  // }, 500);\n})\r\n\r\n/**\r\n * Create a new genesis block\r\n */\r\nexport const newGenesisDAGNode = async (difficulty = 1, address = Buffer.alloc(32).toString('hex')) => {\r\n  let block = {\n    index: 0,\n    prevHash: Buffer.alloc(47).toString('hex'),\n    time: Math.floor(new Date().getTime() / 1000),\n    transactions: [\n      // ms.unspent(network, [], wallet.account()).create(index: 0, amount: consensusSubsidy(0), address)\n    ],\n    nonce: 0\n  }\n  block.hash = await calculateHash(block);\n  block = await goodBlock(block, difficulty)\n  console.log({block});\n  const node = new LFCNode(block)\r\n  return node;\r\n}\r\n",
@@ -2199,7 +2151,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 118,
+    "__docId__": 116,
     "kind": "variable",
     "name": "LFCNode",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2220,7 +2172,7 @@
     "ignore": true
   },
   {
-    "__docId__": 119,
+    "__docId__": 117,
     "kind": "variable",
     "name": "invalidTransactions",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2241,7 +2193,7 @@
     "ignore": true
   },
   {
-    "__docId__": 120,
+    "__docId__": 118,
     "kind": "variable",
     "name": "chain",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2261,7 +2213,7 @@
     }
   },
   {
-    "__docId__": 121,
+    "__docId__": 119,
     "kind": "variable",
     "name": "mempool",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2281,7 +2233,7 @@
     }
   },
   {
-    "__docId__": 122,
+    "__docId__": 120,
     "kind": "variable",
     "name": "blockHashSet",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2301,7 +2253,7 @@
     }
   },
   {
-    "__docId__": 123,
+    "__docId__": 121,
     "kind": "function",
     "name": "invalidTransaction",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2327,7 +2279,7 @@
     "return": null
   },
   {
-    "__docId__": 124,
+    "__docId__": 122,
     "kind": "function",
     "name": "nextBlockTransactions",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2352,7 +2304,7 @@
     "params": []
   },
   {
-    "__docId__": 125,
+    "__docId__": 123,
     "kind": "function",
     "name": "getTransactions",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2394,7 +2346,7 @@
     }
   },
   {
-    "__docId__": 126,
+    "__docId__": 124,
     "kind": "function",
     "name": "getTransactionsForAddress",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2433,7 +2385,7 @@
     }
   },
   {
-    "__docId__": 127,
+    "__docId__": 125,
     "kind": "function",
     "name": "getUnspent",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2475,7 +2427,7 @@
     }
   },
   {
-    "__docId__": 128,
+    "__docId__": 126,
     "kind": "function",
     "name": "getUnspentForAddress",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2514,7 +2466,7 @@
     }
   },
   {
-    "__docId__": 129,
+    "__docId__": 127,
     "kind": "function",
     "name": "getBalanceForAddress",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2544,7 +2496,7 @@
     }
   },
   {
-    "__docId__": 130,
+    "__docId__": 128,
     "kind": "function",
     "name": "getBalanceForAddressAfter",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2580,7 +2532,7 @@
     }
   },
   {
-    "__docId__": 131,
+    "__docId__": 129,
     "kind": "function",
     "name": "difficulty",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2603,7 +2555,7 @@
     }
   },
   {
-    "__docId__": 132,
+    "__docId__": 130,
     "kind": "function",
     "name": "transformBlock",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2638,7 +2590,7 @@
     }
   },
   {
-    "__docId__": 133,
+    "__docId__": 131,
     "kind": "function",
     "name": "timedRequest",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2671,7 +2623,7 @@
     "ignore": true
   },
   {
-    "__docId__": 134,
+    "__docId__": 132,
     "kind": "function",
     "name": "readyState",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2702,7 +2654,7 @@
     "ignore": true
   },
   {
-    "__docId__": 135,
+    "__docId__": 133,
     "kind": "function",
     "name": "connectAfterClose",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2729,7 +2681,7 @@
     "ignore": true
   },
   {
-    "__docId__": 136,
+    "__docId__": 134,
     "kind": "function",
     "name": "filterPeers",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2766,7 +2718,7 @@
     "ignore": true
   },
   {
-    "__docId__": 137,
+    "__docId__": 135,
     "kind": "function",
     "name": "longestChain",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2785,7 +2737,7 @@
     "return": null
   },
   {
-    "__docId__": 138,
+    "__docId__": 136,
     "kind": "function",
     "name": "lastBlock",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2804,7 +2756,7 @@
     "return": null
   },
   {
-    "__docId__": 139,
+    "__docId__": 137,
     "kind": "function",
     "name": "nextBlock",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2834,7 +2786,7 @@
     }
   },
   {
-    "__docId__": 140,
+    "__docId__": 138,
     "kind": "function",
     "name": "goodBlock",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2867,7 +2819,7 @@
     "ignore": true
   },
   {
-    "__docId__": 141,
+    "__docId__": 139,
     "kind": "function",
     "name": "newGenesisDAGNode",
     "memberof": "src/lib/dagchain/dagchain-interface.js",
@@ -2906,7 +2858,7 @@
     }
   },
   {
-    "__docId__": 142,
+    "__docId__": 140,
     "kind": "file",
     "name": "src/lib/dagchain/dagchain.js",
     "content": "import bs58 from 'bs58';\r\nimport EventEmitter from 'events';\r\nimport { chain, difficulty, getUnspent, newGenesisDAGNode, invalidTransaction } from './dagchain-interface';\r\nimport { validate } from './dagblock';\r\nimport { join } from 'path';\r\nimport { genesis, network } from './../../params';\r\nimport { debug, multihashFromHash, succes, log } from './../../utils';\r\nimport { homedir } from 'os';\r\nimport ipldLfc from 'ipld-lfc';\r\nimport ipldLfcTx from 'ipld-lfc-tx';\r\nconst { LFCTx } = ipldLfcTx\r\nconst {util, LFCNode} = ipldLfc\r\nconst { encode } = bs58\r\nglobalThis.states = globalThis.states || {\r\n  ready: false,\r\n  syncing: false,\r\n  connecting: false,\r\n  mining: false\r\n};\r\n// const blockHashSet = []\r\n\r\nexport class DAGChain extends EventEmitter {\r\n  constructor({genesis, ipfs}) {\r\n    super();\r\n    this.announceBlock = this.announceBlock.bind(this);\r\n    this.announceTransaction = this.announceTransaction.bind(this);\r\n\r\n    this.chain = chain;\r\n    this.ipfs = ipfs;\r\n    \r\n    globalThis.resolveBlocks = this.resolveBlocks\r\n  }\r\n\r\n  async init(genesis) {\r\n    await this.ipfs.pubsub.subscribe('message-added', this.announceMessage);\r\n    await this.ipfs.pubsub.subscribe('block-added', this.announceBlock);\r\n    await this.ipfs.pubsub.subscribe('announce-transaction', this.announceTransaction);\r\n    await this.ipfs.pubsub.subscribe('invalid-transaction', invalidTransaction);\r\n    log(`Running on the ${network} network`);\r\n        // TODO: finishe the genesis module\r\n    if (genesis) {\r\n      log(`Creating genesis block on the ${network} network`);\r\n      await this.newDAGChain();\r\n    }\r\n\r\n    try {\r\n      if (!genesis) await this.loadChain();\r\n    } catch (error) {\r\n      debug(error)\r\n      return error\r\n    }\r\n  }\r\n  async resolve(name) {\r\n    return await this.ipfs.name.resolve(name, {recursive: true});\r\n  }\r\n\r\n  async get(multihash) {\r\n    const { value, remainderPath } = await this.ipfs.dag.get(multihash, { format: LFCNode.codec, hashAlg: LFCNode.defaultHashAlg, version: 1, pin: true});\r\n    return value\r\n  }\r\n\r\n  async put(DAGNode) {\r\n    return await this.ipfs.object.put(DAGNode);\r\n  }\r\n\r\n  async pin(multihash) {\r\n    return await this.ipfs.pin.add(multihash, {recursive: true});\r\n  }\r\n\r\n  async syncChain() {\r\n      globalThis.states.syncing = true;\r\n      bus.emit('syncing', true);\r\n      await leofcoin.chain.resync()\r\n      bus.emit('syncing', false)\r\n      globalThis.states.syncing = false;\r\n    return;\r\n  }\r\n\r\n  async loadChain() {\r\n    await this.syncChain();\r\n    console.log('synced');\r\n    globalThis.states.ready = true;\r\n    bus.emit('ready', true);\r\n  }\r\n\r\n  addBlock(block) {\r\n    return new Promise(async (resolve, reject) => {\r\n      try {\r\n        log(`add block: ${block.index}  ${block.hash}`);\r\n        \r\n        const multihash = multihashFromHash(block.hash)\r\n        console.log(block);\r\n        await globalThis.ipfs.dag.put(block, {format: util.codec, hashAlg: util.defaultHashAlg, version: 1, pin: true})\r\n        debug(`multihash: ${multihash}`)\r\n        console.log({block});\r\n        // await globalThis.ipfs.dag.get(multihash, {format: util.codec, hashAlg: util.defaultHashAlg, version: 1, pin: true})\r\n        block.hash = multihash;\r\n        chain[block.index] = block;\r\n        leofcoin.hashMap.set(block.index, multihash)\r\n        // TODO: blockHashSet\r\n        block.transactions = block.transactions.map(link => link.toJSON())\r\n        const _transactions = [];\r\n        for (const {multihash} of block.transactions) {\r\n          const node = await leofcoin.transaction.dag.get(multihash)\r\n          await leofcoin.transaction.dag.put(node)\r\n          \r\n          try {\r\n            debug(`pinning: ${multihash}`);\r\n            await leofcoin.pin.add(multihash)\r\n            // await this.publish(multihash);\r\n          } catch (e) {\r\n            console.warn(e);\r\n          }\r\n          \r\n          debug(`${multihash} pinned`)\r\n          _transactions.push(node.toJSON())\r\n        }\r\n        chain[block.index].transactions = _transactions\r\n        bus.emit('block-added', block);\r\n        debug(`updating current local block: ${multihash}`)\r\n\r\n        await leofcoin.chain.updateLocals(multihash, block.index);\r\n        try {\r\n          debug(`pinning: ${'/ipfs/' + multihash}`);\r\n          await this.pin('/ipfs/' + multihash)\r\n          // await this.publish(multihash);\r\n        } catch (e) {\r\n          console.warn(e);\r\n        }\r\n        \r\n        try {\r\n          debug(`Publishing ${'/ipfs/' + multihash}`)\r\n          await ipfs.name.publish('/ipfs/' + multihash)\r\n          // await this.publish(multihash);\r\n        } catch (e) {\r\n          console.warn(e);\r\n        }\r\n        block.transactions.forEach(async tx => {\r\n          // const {value} = await globalThis.ipfs.dag.get(multihash, { format: LFCTx.codec, hashAlg: defaultHashAlg})\r\n          const index = mempool.indexOf(tx)\r\n          mempool.splice(index)\r\n        })\r\n      } catch (e) {\r\n        console.error(e);\r\n      }\r\n    });\r\n  }\r\n\r\n  /**\r\n   * Initialize a new chain on the IPFS network\r\n   * Creates creates & saves the genesisBlock to IPFS, blocks are pinned so they aren't removeable on the local side.\r\n   *\r\n   * @param {object} block The genesis block to write\r\n   * @setup PART of Easy setup your own blockchain, more info URL...\r\n   */\r\n   // TODO: switch to itx\r\n  async newDAGChain() {\r\n    try {\r\n      const genesisBlock = await newGenesisDAGNode(difficulty());\r\n      const cid = await ipfs.dag.put(genesisBlock, { format: 'leofcoin-block', hashAlg: util.defaultHashAlg, version: 1, multibaseName: 'base58btc', pin: true});\r\n      await leofcoin.chain.updateLocals(cid.toBaseEncodedString(), 0);\r\n      \r\n      succes('genesisBlock created');\r\n      log(`genesisBlock: ${genesisBlock.toString()}`);\r\n      log(`genesisBlock CID: ${cid}`);\r\n      log(`genesis: ${encode(genesisBlock.serialize())}`);\r\n      log(`DAGChain link ${cid.toBaseEncodedString()}`);\r\n      return;\r\n    } catch (e) {\r\n      console.error(e);\r\n    }\r\n  }\r\n  \r\n  async announceTransaction({data, from}) {\r\n    const {multihash, size} = JSON.parse(data.toString());\r\n    // const { value } = await getTx(multihash)\r\n    // value.hash = multihash\r\n    // console.log(value);\r\n    mempool.push({multihash, size})\r\n  }\r\n  \r\n  async resync(block) {\r\n    await leofcoin.chain.resync(block)\r\n  }\r\n  \r\n  async announceMessage({data, from}) {\r\n    const {multihash} = JSON.parse(data.toString());\r\n    \r\n    messagePool.add(multihash)\r\n  }\r\n\r\n  // TODO: go with previous block instead off lastBlock\r\n  // TODO: validate on sync ...\r\n  async announceBlock({data, from}) {\r\n    console.log(data.toString());\r\n      const block = JSON.parse(data.toString());\r\n      if (chain[block.index]) {\r\n        bus.emit('invalid-block', block);\r\n        await ipfs.pubsub.publish('invalid-block', Buffer.from(JSON.stringify(block)));\r\n        return\r\n      }\r\n      if (block.index > chain[chain.length - 1].index + 1) await leofcoin.chain.resync(block)\r\n      try {\r\n        // const previousBlock = await lastBlock(); // test\r\n        await validate(chain[chain.length - 1], block, difficulty(), await getUnspent());\r\n        await this.addBlock(block); // add to chai\r\n        \r\n      } catch (error) {\r\n        // TODO: remove publish invalid-block\r\n        debug(`Invalid block ${block.hash}`)\r\n        bus.emit('invalid-block', block);\r\n        \r\n        await ipfs.pubsub.publish('invalid-block', Buffer.from(JSON.stringify(block)));\r\n        console.log('invalid', error);\r\n        // await this.resync(block)\r\n        return\r\n      }\r\n    }\r\n}\r\n",
@@ -2917,7 +2869,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 143,
+    "__docId__": 141,
     "kind": "variable",
     "name": "LFCTx",
     "memberof": "src/lib/dagchain/dagchain.js",
@@ -2938,7 +2890,7 @@
     "ignore": true
   },
   {
-    "__docId__": 144,
+    "__docId__": 142,
     "kind": "variable",
     "name": "util",
     "memberof": "src/lib/dagchain/dagchain.js",
@@ -2959,7 +2911,7 @@
     "ignore": true
   },
   {
-    "__docId__": 145,
+    "__docId__": 143,
     "kind": "variable",
     "name": "encode",
     "memberof": "src/lib/dagchain/dagchain.js",
@@ -2980,7 +2932,7 @@
     "ignore": true
   },
   {
-    "__docId__": 146,
+    "__docId__": 144,
     "kind": "class",
     "name": "DAGChain",
     "memberof": "src/lib/dagchain/dagchain.js",
@@ -2999,7 +2951,7 @@
     ]
   },
   {
-    "__docId__": 147,
+    "__docId__": 145,
     "kind": "constructor",
     "name": "constructor",
     "memberof": "src/lib/dagchain/dagchain.js~DAGChain",
@@ -3013,7 +2965,7 @@
     "undocument": true
   },
   {
-    "__docId__": 150,
+    "__docId__": 148,
     "kind": "member",
     "name": "chain",
     "memberof": "src/lib/dagchain/dagchain.js~DAGChain",
@@ -3030,7 +2982,7 @@
     }
   },
   {
-    "__docId__": 151,
+    "__docId__": 149,
     "kind": "member",
     "name": "ipfs",
     "memberof": "src/lib/dagchain/dagchain.js~DAGChain",
@@ -3047,7 +2999,7 @@
     }
   },
   {
-    "__docId__": 152,
+    "__docId__": 150,
     "kind": "method",
     "name": "init",
     "memberof": "src/lib/dagchain/dagchain.js~DAGChain",
@@ -3074,7 +3026,7 @@
     }
   },
   {
-    "__docId__": 153,
+    "__docId__": 151,
     "kind": "method",
     "name": "resolve",
     "memberof": "src/lib/dagchain/dagchain.js~DAGChain",
@@ -3101,7 +3053,7 @@
     }
   },
   {
-    "__docId__": 154,
+    "__docId__": 152,
     "kind": "method",
     "name": "get",
     "memberof": "src/lib/dagchain/dagchain.js~DAGChain",
@@ -3128,7 +3080,7 @@
     }
   },
   {
-    "__docId__": 155,
+    "__docId__": 153,
     "kind": "method",
     "name": "put",
     "memberof": "src/lib/dagchain/dagchain.js~DAGChain",
@@ -3155,7 +3107,7 @@
     }
   },
   {
-    "__docId__": 156,
+    "__docId__": 154,
     "kind": "method",
     "name": "pin",
     "memberof": "src/lib/dagchain/dagchain.js~DAGChain",
@@ -3182,7 +3134,7 @@
     }
   },
   {
-    "__docId__": 157,
+    "__docId__": 155,
     "kind": "method",
     "name": "syncChain",
     "memberof": "src/lib/dagchain/dagchain.js~DAGChain",
@@ -3198,7 +3150,7 @@
     "return": null
   },
   {
-    "__docId__": 158,
+    "__docId__": 156,
     "kind": "method",
     "name": "loadChain",
     "memberof": "src/lib/dagchain/dagchain.js~DAGChain",
@@ -3214,7 +3166,7 @@
     "return": null
   },
   {
-    "__docId__": 159,
+    "__docId__": 157,
     "kind": "method",
     "name": "addBlock",
     "memberof": "src/lib/dagchain/dagchain.js~DAGChain",
@@ -3241,7 +3193,7 @@
     }
   },
   {
-    "__docId__": 160,
+    "__docId__": 158,
     "kind": "method",
     "name": "newDAGChain",
     "memberof": "src/lib/dagchain/dagchain.js~DAGChain",
@@ -3273,7 +3225,7 @@
     "return": null
   },
   {
-    "__docId__": 161,
+    "__docId__": 159,
     "kind": "method",
     "name": "announceTransaction",
     "memberof": "src/lib/dagchain/dagchain.js~DAGChain",
@@ -3301,7 +3253,7 @@
     "return": null
   },
   {
-    "__docId__": 162,
+    "__docId__": 160,
     "kind": "method",
     "name": "resync",
     "memberof": "src/lib/dagchain/dagchain.js~DAGChain",
@@ -3324,7 +3276,7 @@
     "return": null
   },
   {
-    "__docId__": 163,
+    "__docId__": 161,
     "kind": "method",
     "name": "announceMessage",
     "memberof": "src/lib/dagchain/dagchain.js~DAGChain",
@@ -3352,7 +3304,7 @@
     "return": null
   },
   {
-    "__docId__": 164,
+    "__docId__": 162,
     "kind": "method",
     "name": "announceBlock",
     "memberof": "src/lib/dagchain/dagchain.js~DAGChain",
@@ -3380,7 +3332,7 @@
     "return": null
   },
   {
-    "__docId__": 165,
+    "__docId__": 163,
     "kind": "file",
     "name": "src/lib/errors.js",
     "content": "const invalid = (name, text) => new Error(`Invalid ${name}: ${text}`);\r\n// TODO: show notification\r\nexport const BlockError = text => invalid('block', text);\r\n\r\nexport const TransactionError = text =>\tinvalid('transaction', text);\r\n\r\nexport const MinerWarning = text => new Error(`warning @Miner: ${text}`);\r\n",
@@ -3391,7 +3343,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 166,
+    "__docId__": 164,
     "kind": "function",
     "name": "invalid",
     "memberof": "src/lib/errors.js",
@@ -3424,7 +3376,7 @@
     "ignore": true
   },
   {
-    "__docId__": 167,
+    "__docId__": 165,
     "kind": "function",
     "name": "BlockError",
     "memberof": "src/lib/errors.js",
@@ -3450,7 +3402,7 @@
     "return": null
   },
   {
-    "__docId__": 168,
+    "__docId__": 166,
     "kind": "function",
     "name": "TransactionError",
     "memberof": "src/lib/errors.js",
@@ -3476,7 +3428,7 @@
     "return": null
   },
   {
-    "__docId__": 169,
+    "__docId__": 167,
     "kind": "function",
     "name": "MinerWarning",
     "memberof": "src/lib/errors.js",
@@ -3502,7 +3454,7 @@
     "return": null
   },
   {
-    "__docId__": 170,
+    "__docId__": 168,
     "kind": "file",
     "name": "src/lib/hash.js",
     "content": "import cryptoJs from 'crypto-js';\r\nimport IPLDLFCTx from 'ipld-lfc-tx';\r\nconst {SHA256} = cryptoJs\r\nconst _SHA256 = (object) => {\r\n\treturn SHA256(JSON.stringify(object)).toString();\r\n};\r\n\r\n/**\r\n * Generate block hash\r\n *\r\n * @param {object} block {index, prevHash, time, transactions, nonce}\r\n */\r\nexport const calculateBlockHash = (block) => {\r\n\tconst {index, prevHash, time, transactions, nonce} = block;\r\n\treturn _SHA256({index, prevHash, time, transactions, nonce});\r\n};\r\n\r\n/**\r\n * Generate transaction hash\r\n *\r\n * @param {object} transaction {id, type, inputs, outputs}\r\n */\r\nexport const transactionHash = async transaction => {\r\n\tconst tx = new IPLDLFCTx.LFCTx(transaction)\r\n\tconst cid = await IPLDLFCTx.util.cid(tx.serialize())\r\n\treturn cid.toBaseEncodedString()\r\n};\r\n\r\n/**\r\n * Generate transaction input hash\r\n *\r\n * @param {object} transactionInput {transaction, index, amount, address}\r\n */\r\nexport const transactionInputHash = (transactionInput) => {\r\n\tconst {tx, index, amount, address} = transactionInput;\r\n\treturn _SHA256({tx, index, amount, address});\r\n};\r\n",
@@ -3513,7 +3465,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 171,
+    "__docId__": 169,
     "kind": "variable",
     "name": "SHA256",
     "memberof": "src/lib/hash.js",
@@ -3534,7 +3486,7 @@
     "ignore": true
   },
   {
-    "__docId__": 172,
+    "__docId__": 170,
     "kind": "function",
     "name": "_SHA256",
     "memberof": "src/lib/hash.js",
@@ -3565,7 +3517,7 @@
     "ignore": true
   },
   {
-    "__docId__": 173,
+    "__docId__": 171,
     "kind": "function",
     "name": "calculateBlockHash",
     "memberof": "src/lib/hash.js",
@@ -3598,7 +3550,7 @@
     }
   },
   {
-    "__docId__": 174,
+    "__docId__": 172,
     "kind": "function",
     "name": "transactionHash",
     "memberof": "src/lib/hash.js",
@@ -3631,7 +3583,7 @@
     }
   },
   {
-    "__docId__": 175,
+    "__docId__": 173,
     "kind": "function",
     "name": "transactionInputHash",
     "memberof": "src/lib/hash.js",
@@ -3664,7 +3616,7 @@
     }
   },
   {
-    "__docId__": 176,
+    "__docId__": 174,
     "kind": "file",
     "name": "src/lib/message.js",
     "content": "/**\r\n * Create message\r\n *\r\n * @param value - \r\n * @param receiver - \r\n * @return {{id: string, reward: boolean, inputs: *, outputs: *, hash: string}}\r\n */\r\nconst newMessage = async (value, receiver) => {\r\n\ttry {\r\n\t\tconst tx = new LFCMessage({\r\n\t\t\tid: randomBytes(32).toString('hex'),\r\n\t\t\ttime: Math.floor(new Date().getTime() / 1000),\r\n\t\t\tprevHash,\r\n\t\t\tvalue,\r\n\t\t\treceiver\r\n\t\t});\r\n\t\tconst cid = await util.cid(tx.serialize())\r\n\t\tdebug(`create transaction: ${tx}`);\r\n\t\tawait global.ipfs.dag.put(tx, {format: util.codec, hashAlg: util.defaultHashAlg, version: 1, baseFormat: 'base58btc'})\r\n\t\treturn { multihash: cid.toBaseEncodedString(), size: tx.size};\r\n\t} catch (e) {\r\n\t\tthrow e\r\n\t}\r\n};",
@@ -3675,7 +3627,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 177,
+    "__docId__": 175,
     "kind": "function",
     "name": "newMessage",
     "memberof": "src/lib/message.js",
@@ -3722,7 +3674,7 @@
     "ignore": true
   },
   {
-    "__docId__": 178,
+    "__docId__": 176,
     "kind": "file",
     "name": "src/lib/miner.js",
     "content": "import { config, hashLog, median } from './../utils';\r\nimport getDifficulty from '../difficulty';\r\nimport { BlockError, TransactionError, MinerWarning } from './errors';\r\nimport { nextBlock, difficulty } from './dagchain/dagchain-interface';\r\nimport bus from './bus';\r\nimport { fork } from 'child_process';\r\nimport { join } from 'path';\r\n\r\nexport default class Miner {\r\n\r\n  get donationAddress() {\r\n    return 'cpc';\r\n  }\n\n  set job(value) {\n    this._job = value;\n  }\n\n  get job() {\n    return this._job;\n  }\r\n\r\n  constructor(address, intensity, autostart) {\r\n    // TODO: limit intensity when pool is empty\r\n    this.workerPath = join(__dirname, 'miner-worker.js')\r\n    if (!address) {\r\n      MinerWarning('All profit will be donated until address is set');\r\n    }\r\n    this.address = address;\r\n    this.running = 0;\r\n\r\n\r\n    if (autostart) {\r\n      this.start();\r\n    }\r\n  }\r\n\r\n  /**\r\n   * keep node(s) in sync\r\n   */\r\n  onBlockAdded() {\r\n    return new Promise((resolve, reject) => {\r\n      this._onBlockAdded = block => {\n        this.mineStop()\r\n        bus.removeListener('block-added', this._onBlockAdded);\r\n        bus.removeListener('invalid-block', this._onBlockInvalid);\r\n        resolve(block);\r\n      }\r\n      this._onBlockInvalid = block => {\n        this.mineStop()\r\n        bus.removeListener('block-added', this._onBlockAdded);\r\n        bus.removeListener('invalid-block', this._onBlockInvalid);\r\n        resolve(null);\r\n      }\r\n      bus.once('block-added', this._onBlockAdded);\r\n      bus.once('invalid-block', this._onBlockInvalid);\r\n    });\r\n  }\r\n\r\n\r\n  async start() {\r\n    // ipfs.pubsub.subscribe('invalid-block');\r\n    this.mining = true;\n    if (!this.job) this.job = Math.random().toString(36).slice(-11);\r\n    this.mine(this.job);\r\n  }\r\n\r\n  stop() {\r\n    this.mining = false;\r\n    this.mineStop();\r\n  }\r\n\r\n  async mine(job, lastValidBlock) {\r\n    const address = this.address || this.donationAddress;\r\n    const start = Date.now();\r\n    const {block, hashes, index} = await this.mineBlock(difficulty(), address, job);\r\n\r\n    if (hashes) {\r\n      const now = Date.now();\r\n      const seconds = (now - start) / 1000;\r\n      const rate = (hashes / seconds) / 1000;\r\n      bus.emit('miner.hashrate', {uid: job, hashrate: (Math.round(rate * 100) / 100)});\r\n    }\r\n\r\n    if (block) {\r\n      global.ipfs.pubsub.publish('block-added', Buffer.from(JSON.stringify(block)));\r\n      console.log(`${job}::Whooooop mined block ${block.index}`);\r\n      if (this.mining) {\r\n        await this.onBlockAdded();\r\n        this.mine(job, block);\r\n      }\r\n    } else {\r\n      console.log(`${job}::cancelled mining block ${index}`);\r\n      if (this.mining) this.mine(job);\r\n    }\r\n\r\n  }\r\n\r\n  /**\r\n   * Mine a block in separate process\r\n   *\r\n   * @param transactions Transactions list to add to the block\r\n   * @param lastBlock Last block in the blockchain\r\n   * @param difficulty Current difficulty\r\n   * @param address Addres for reward transaction\r\n   * @return {*}\r\n   */\r\n  async mineBlock(difficulty, address, job) {\r\n    const block = await nextBlock(address);\r\n    console.log(`${job}::Started mining block ${block.index}`);\r\n\r\n    return this.findBlockHash(block, difficulty);\r\n  }\r\n\r\n  /**\r\n   * Find block hash according to difficulty\r\n   *\r\n   * @param block\r\n   * @param difficulty\r\n   * @return {Promise}\r\n   */\r\n  findBlockHash (block, difficulty) {\r\n    return new Promise((resolve, reject) => {\r\n      const worker = fork(this.workerPath);\r\n      /*\r\n       * Create worker to find hash in separate process\r\n       */\r\n\r\n\r\n       /*\r\n        * Hadnle events to stop mining when needed\r\n        */\r\n      this.mineStop = () => {\r\n       removeListeners()\r\n       worker.kill('SIGINT')\r\n       resolve({block: null, hashCount: null, index: block.index});\r\n      }\r\n\r\n      // Listeners for stopping mining\r\n      const blockAddedListener = b => {\r\n        if (b.index >= block.index) this.mineStop()\r\n      }\r\n      const mineStopListener = b => this.mineStop\r\n      const removeListeners = () => {\r\n       bus.removeListener('block-added', blockAddedListener)\r\n       bus.removeListener('mine-stop', mineStopListener)\r\n      }\r\n      // If other process found the same block faster, kill current one\r\n      bus.once('block-added', blockAddedListener)\r\n      bus.once('mine-stop', mineStopListener)\r\n      // const result = await minerWorker({block, difficulty})\r\n      worker.on('message', (data) => {\r\n        removeListeners();\r\n\r\n        resolve({block: data.block, hashes: data.hashCount});\r\n        worker.kill('SIGINT');\r\n      })\r\n      worker.send({block, difficulty});\r\n\r\n    });\r\n  }\r\n\r\n}\r\n",
@@ -3733,7 +3685,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 179,
+    "__docId__": 177,
     "kind": "class",
     "name": "Miner",
     "memberof": "src/lib/miner.js",
@@ -3749,7 +3701,7 @@
     "interface": false
   },
   {
-    "__docId__": 180,
+    "__docId__": 178,
     "kind": "get",
     "name": "donationAddress",
     "memberof": "src/lib/miner.js~Miner",
@@ -3768,7 +3720,7 @@
     }
   },
   {
-    "__docId__": 181,
+    "__docId__": 179,
     "kind": "set",
     "name": "job",
     "memberof": "src/lib/miner.js~Miner",
@@ -3782,7 +3734,7 @@
     "undocument": true
   },
   {
-    "__docId__": 182,
+    "__docId__": 180,
     "kind": "member",
     "name": "_job",
     "memberof": "src/lib/miner.js~Miner",
@@ -3799,7 +3751,7 @@
     }
   },
   {
-    "__docId__": 183,
+    "__docId__": 181,
     "kind": "get",
     "name": "job",
     "memberof": "src/lib/miner.js~Miner",
@@ -3818,7 +3770,7 @@
     }
   },
   {
-    "__docId__": 184,
+    "__docId__": 182,
     "kind": "constructor",
     "name": "constructor",
     "memberof": "src/lib/miner.js~Miner",
@@ -3832,7 +3784,7 @@
     "undocument": true
   },
   {
-    "__docId__": 185,
+    "__docId__": 183,
     "kind": "member",
     "name": "workerPath",
     "memberof": "src/lib/miner.js~Miner",
@@ -3849,7 +3801,7 @@
     }
   },
   {
-    "__docId__": 186,
+    "__docId__": 184,
     "kind": "member",
     "name": "address",
     "memberof": "src/lib/miner.js~Miner",
@@ -3866,7 +3818,7 @@
     }
   },
   {
-    "__docId__": 187,
+    "__docId__": 185,
     "kind": "member",
     "name": "running",
     "memberof": "src/lib/miner.js~Miner",
@@ -3883,7 +3835,7 @@
     }
   },
   {
-    "__docId__": 188,
+    "__docId__": 186,
     "kind": "method",
     "name": "onBlockAdded",
     "memberof": "src/lib/miner.js~Miner",
@@ -3902,7 +3854,7 @@
     }
   },
   {
-    "__docId__": 189,
+    "__docId__": 187,
     "kind": "member",
     "name": "_onBlockAdded",
     "memberof": "src/lib/miner.js~Miner",
@@ -3919,7 +3871,7 @@
     }
   },
   {
-    "__docId__": 190,
+    "__docId__": 188,
     "kind": "member",
     "name": "_onBlockInvalid",
     "memberof": "src/lib/miner.js~Miner",
@@ -3936,7 +3888,7 @@
     }
   },
   {
-    "__docId__": 191,
+    "__docId__": 189,
     "kind": "method",
     "name": "start",
     "memberof": "src/lib/miner.js~Miner",
@@ -3952,7 +3904,7 @@
     "return": null
   },
   {
-    "__docId__": 192,
+    "__docId__": 190,
     "kind": "member",
     "name": "mining",
     "memberof": "src/lib/miner.js~Miner",
@@ -3969,7 +3921,7 @@
     }
   },
   {
-    "__docId__": 194,
+    "__docId__": 192,
     "kind": "method",
     "name": "stop",
     "memberof": "src/lib/miner.js~Miner",
@@ -3985,7 +3937,7 @@
     "return": null
   },
   {
-    "__docId__": 196,
+    "__docId__": 194,
     "kind": "method",
     "name": "mine",
     "memberof": "src/lib/miner.js~Miner",
@@ -4014,7 +3966,7 @@
     "return": null
   },
   {
-    "__docId__": 197,
+    "__docId__": 195,
     "kind": "method",
     "name": "mineBlock",
     "memberof": "src/lib/miner.js~Miner",
@@ -4077,7 +4029,7 @@
     }
   },
   {
-    "__docId__": 198,
+    "__docId__": 196,
     "kind": "method",
     "name": "findBlockHash",
     "memberof": "src/lib/miner.js~Miner",
@@ -4120,7 +4072,7 @@
     }
   },
   {
-    "__docId__": 199,
+    "__docId__": 197,
     "kind": "member",
     "name": "mineStop",
     "memberof": "src/lib/miner.js~Miner",
@@ -4137,7 +4089,7 @@
     }
   },
   {
-    "__docId__": 200,
+    "__docId__": 198,
     "kind": "file",
     "name": "src/lib/network/secure-client-connection.js",
     "content": "import io from 'socket.io-client';\r\nimport EventEmitter from 'events';\r\nimport ecdh from 'crypto-ecdh';\r\nimport { exists, write } from 'crypto-io-fs';\r\nimport { seed, netKeyPath } from './../../params';\r\n// TODO: hardcoded swarm key?\r\n// TODO: replace with websocket\r\n\r\nexport const initConnection = new Promise((resolve, reject) => {\r\n  const socket = io(seed);\r\n\r\n  socket.on('handshake', pubKey => {\r\n    const pair = ecdh('hex');\r\n    pair.derive(pubKey);\r\n\r\n    // start a new secure connection using ECDH\r\n    new SecureClientConnection(socket, pair).on('connected', connection => resolve(connection));\r\n  });\r\n});\r\n\r\nclass SecureClientConnection extends EventEmitter {\r\n  constructor(socket, pair) {\r\n    super();\r\n    // declare properties\r\n    this.id = socket.id;\r\n    this.pair = pair;\r\n    this.socket = socket;\r\n    // bind methods\r\n    this.handshake = this.handshake.bind(this);\r\n    // init listeners & emitters\r\n    this.shake();\r\n  }\r\n\r\n  requestKey() {\r\n    return new Promise((resolve, reject) => {\r\n      this.socket.on('_request-key', key => {\r\n        resolve(key);\r\n      });\r\n      this.socket.emit('request-key');\r\n    });\r\n  }\r\n\r\n  async shake() {\r\n    this.socket.on('secure-connection', this.handshake);\r\n    this.socket.emit('_handshake', this.pair.public);\r\n  }\r\n\r\n  async handshake(cipher) {\r\n    const key = await this.pair.decrypt(cipher);\r\n    // get a new pair\r\n    const pair = ecdh('hex');\r\n    // encrypt our new key\r\n    cipher = await this.pair.encrypt(pair.public);\r\n    this.pair = pair;\r\n    this.pair.derive(key);\r\n\r\n    this.socket.on('network', async cipher => {\r\n      const address = await this.pair.decrypt(cipher);\r\n      if (!exists(netKeyPath)) {\r\n        cipher = await this.requestKey();\r\n        const key = await this.pair.decrypt(cipher);\r\n        await write(netKeyPath, key);\r\n      }\r\n      this.emit('connected', {address});\r\n    });\r\n    this.socket.on('address', data => console.log(data));\r\n    this.socket.emit('_secure-connection', cipher.toString());\r\n  }\r\n}\r\n",
@@ -4148,7 +4100,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 201,
+    "__docId__": 199,
     "kind": "variable",
     "name": "initConnection",
     "memberof": "src/lib/network/secure-client-connection.js",
@@ -4168,7 +4120,7 @@
     }
   },
   {
-    "__docId__": 202,
+    "__docId__": 200,
     "kind": "class",
     "name": "SecureClientConnection",
     "memberof": "src/lib/network/secure-client-connection.js",
@@ -4188,7 +4140,7 @@
     "ignore": true
   },
   {
-    "__docId__": 203,
+    "__docId__": 201,
     "kind": "constructor",
     "name": "constructor",
     "memberof": "src/lib/network/secure-client-connection.js~SecureClientConnection",
@@ -4202,7 +4154,7 @@
     "undocument": true
   },
   {
-    "__docId__": 204,
+    "__docId__": 202,
     "kind": "member",
     "name": "id",
     "memberof": "src/lib/network/secure-client-connection.js~SecureClientConnection",
@@ -4219,7 +4171,7 @@
     }
   },
   {
-    "__docId__": 205,
+    "__docId__": 203,
     "kind": "member",
     "name": "pair",
     "memberof": "src/lib/network/secure-client-connection.js~SecureClientConnection",
@@ -4236,7 +4188,7 @@
     }
   },
   {
-    "__docId__": 206,
+    "__docId__": 204,
     "kind": "member",
     "name": "socket",
     "memberof": "src/lib/network/secure-client-connection.js~SecureClientConnection",
@@ -4253,7 +4205,7 @@
     }
   },
   {
-    "__docId__": 208,
+    "__docId__": 206,
     "kind": "method",
     "name": "requestKey",
     "memberof": "src/lib/network/secure-client-connection.js~SecureClientConnection",
@@ -4273,7 +4225,7 @@
     }
   },
   {
-    "__docId__": 209,
+    "__docId__": 207,
     "kind": "method",
     "name": "shake",
     "memberof": "src/lib/network/secure-client-connection.js~SecureClientConnection",
@@ -4289,7 +4241,7 @@
     "return": null
   },
   {
-    "__docId__": 210,
+    "__docId__": 208,
     "kind": "method",
     "name": "handshake",
     "memberof": "src/lib/network/secure-client-connection.js~SecureClientConnection",
@@ -4312,7 +4264,7 @@
     "return": null
   },
   {
-    "__docId__": 212,
+    "__docId__": 210,
     "kind": "file",
     "name": "src/lib/network/validate.js",
     "content": "import {object, number, array, string, boolean} from '@hapi/joi';\r\n\r\nconst block = object().keys({\r\n\tindex: number(),\r\n\tprevHash: string().length(94),\r\n\ttime: number(),\r\n\ttransactions: array().items(object().keys({\r\n\t\tmultihash: string(),\r\n\t\tsize: number()\r\n\t})),\r\n\tnonce: number(),\r\n\thash: string().length(128)\r\n});\r\n\r\nconst transaction = object().keys({\r\n\tid: string().hex().length(64),\r\n\ttime: number(),\r\n\treward: string(),\r\n\tscript: string(),\r\n\tinputs: array().items(object().keys({\r\n\t\ttx: string().hex().length(64),\r\n\t\tindex: number(),\r\n\t\tamount: number(),\r\n\t\taddress: string(),\r\n\t\tsignature: string().hex()\r\n\t})),\r\n\toutputs: array().items(object().keys({\r\n\t\tindex: number(),\r\n\t\tamount: number(),\r\n\t\taddress: string()\r\n\t})),\r\n});\r\n\r\nconst schemas = {\r\n\tblock,\r\n\ttransaction,\r\n};\r\n\r\nexport const validate = (schema, data) =>  schemas[schema].validate(data);\r\n\r\nexport const isValid = (schema, data) => {\r\n\tconsole.log(validate(schema, data).error);\r\n\treturn Boolean(!validate(schema, data).error)\r\n};",
@@ -4323,7 +4275,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 213,
+    "__docId__": 211,
     "kind": "variable",
     "name": "block",
     "memberof": "src/lib/network/validate.js",
@@ -4344,7 +4296,7 @@
     "ignore": true
   },
   {
-    "__docId__": 214,
+    "__docId__": 212,
     "kind": "variable",
     "name": "transaction",
     "memberof": "src/lib/network/validate.js",
@@ -4365,7 +4317,7 @@
     "ignore": true
   },
   {
-    "__docId__": 215,
+    "__docId__": 213,
     "kind": "variable",
     "name": "schemas",
     "memberof": "src/lib/network/validate.js",
@@ -4386,7 +4338,7 @@
     "ignore": true
   },
   {
-    "__docId__": 216,
+    "__docId__": 214,
     "kind": "function",
     "name": "validate",
     "memberof": "src/lib/network/validate.js",
@@ -4418,7 +4370,7 @@
     "return": null
   },
   {
-    "__docId__": 217,
+    "__docId__": 215,
     "kind": "function",
     "name": "isValid",
     "memberof": "src/lib/network/validate.js",
@@ -4454,7 +4406,7 @@
     }
   },
   {
-    "__docId__": 218,
+    "__docId__": 216,
     "kind": "file",
     "name": "src/lib/networks.js",
     "content": "// https://en.bitcoin.it/wiki/List_of_address_prefixes\r\n// Dogecoin BIP32 is a proposed standard: https://bitcointalk.org/index.php?topic=409731\r\n\r\n/**\r\n * Main network\r\n * @return {messagePrefix, pubKeyHash, scriptHash, wif, bip32}\r\n */\r\nconst leofcoin = {\r\n\tmessagePrefix: '\\u0019Leofcoin Signed Message:',\r\n\tpubKeyHash: 0x30, // L\r\n\tscriptHash: 0x37, // P\r\n\twif: 0x3F, // S\r\n\tmultiCodec: 0x3c4,\r\n\tbip32: { public: 0x13BBF2D4, private: 0x13BBCBC4 }\r\n};\r\n\r\n/**\r\n * Tesnet\r\n * @return {messagePrefix, pubKeyHash, scriptHash, wif, bip32}\r\n */\r\nconst olivia = {\r\n\tmessagePrefix: '\\u0019Leofcoin Signed Message:',\r\n\tpubKeyHash: 0x73, // o\r\n\tscriptHash: 0x76, // p\r\n\twif: 0x7D, // s\r\n\tmultiCodec: 0x7c4,\r\n\tbip32: { public: 0x13BBF2D5, private: 0x13BBCBC5 }\r\n};\r\n\r\nconst bitcoin = {\r\n\tmessagePrefix: '\\x18Bitcoin Signed Message:\\n',\r\n\tbech32: 'bc',\r\n\tpubKeyHash: 0x00,\r\n\tscriptHash: 0x05,\r\n\twif: 0x80,\r\n\tbip32: {\r\n\t\tpublic: 0x0488b21e, private: 0x0488ade4\r\n\t}\r\n};\r\n\r\nconst testnet = {\r\n\tmessagePrefix: '\\x18Bitcoin Signed Message:\\n',\r\n\tbech32: 'tb',\r\n\tpubKeyHash: 0x6f,\r\n\tscriptHash: 0xc4,\r\n\twif: 0xef,\r\n\tbip32: {\r\n\t\tpublic: 0x043587cf,\r\n\t\tprivate: 0x04358394\r\n\t}\r\n};\r\n\r\nconst litecoin = {\r\n\tmessagePrefix: '\\x19Litecoin Signed Message:\\n',\r\n\tpubKeyHash: 0x30,\r\n\tscriptHash: 0x32,\r\n\twif: 0xb0,\r\n\tbip32: {\r\n\t\tpublic: 0x019da462,\r\n\t\tprivate: 0x019d9cfe\r\n\t}\r\n};\r\n\r\n/**\r\n * Our & supported networks\r\n * @return {leofcoin, olivia}\r\n */\r\nexport default {\r\n\t// main network\r\n\tleofcoin,\r\n\t// testnet\r\n\tolivia,\r\n\tbitcoin,\r\n\ttestnet,\r\n\tlitecoin\r\n};\r\n",
@@ -4465,7 +4417,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 219,
+    "__docId__": 217,
     "kind": "variable",
     "name": "leofcoin",
     "memberof": "src/lib/networks.js",
@@ -4493,7 +4445,7 @@
     "ignore": true
   },
   {
-    "__docId__": 220,
+    "__docId__": 218,
     "kind": "variable",
     "name": "olivia",
     "memberof": "src/lib/networks.js",
@@ -4521,7 +4473,7 @@
     "ignore": true
   },
   {
-    "__docId__": 221,
+    "__docId__": 219,
     "kind": "variable",
     "name": "bitcoin",
     "memberof": "src/lib/networks.js",
@@ -4542,7 +4494,7 @@
     "ignore": true
   },
   {
-    "__docId__": 222,
+    "__docId__": 220,
     "kind": "variable",
     "name": "testnet",
     "memberof": "src/lib/networks.js",
@@ -4563,7 +4515,7 @@
     "ignore": true
   },
   {
-    "__docId__": 223,
+    "__docId__": 221,
     "kind": "variable",
     "name": "litecoin",
     "memberof": "src/lib/networks.js",
@@ -4584,7 +4536,7 @@
     "ignore": true
   },
   {
-    "__docId__": 224,
+    "__docId__": 222,
     "kind": "file",
     "name": "src/lib/pool/message.js",
     "content": "export default class MessagePool {\r\n  get pool() {\r\n    return this._pool\r\n  }\r\n  constructor() {\r\n    this._pool = []\r\n  }\r\n  \r\n  add(multihash) {\r\n    leofcoin.message.dag.get(multihash)\r\n    this._pool.push(multihash)\r\n    leofcoin.pin.add(multihash)\r\n  }\r\n  \r\n  remove(multihash) {\r\n    const index = this._pool.indexOf(multihash)\r\n    this._pool.splice(index, 1)\r\n    leofcoin.message.dag.remove(multihash)\r\n  }\r\n}",
@@ -4595,7 +4547,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 225,
+    "__docId__": 223,
     "kind": "class",
     "name": "MessagePool",
     "memberof": "src/lib/pool/message.js",
@@ -4611,7 +4563,7 @@
     "interface": false
   },
   {
-    "__docId__": 226,
+    "__docId__": 224,
     "kind": "get",
     "name": "pool",
     "memberof": "src/lib/pool/message.js~MessagePool",
@@ -4630,7 +4582,7 @@
     }
   },
   {
-    "__docId__": 227,
+    "__docId__": 225,
     "kind": "constructor",
     "name": "constructor",
     "memberof": "src/lib/pool/message.js~MessagePool",
@@ -4644,7 +4596,7 @@
     "undocument": true
   },
   {
-    "__docId__": 228,
+    "__docId__": 226,
     "kind": "member",
     "name": "_pool",
     "memberof": "src/lib/pool/message.js~MessagePool",
@@ -4661,7 +4613,7 @@
     }
   },
   {
-    "__docId__": 229,
+    "__docId__": 227,
     "kind": "method",
     "name": "add",
     "memberof": "src/lib/pool/message.js~MessagePool",
@@ -4684,7 +4636,7 @@
     "return": null
   },
   {
-    "__docId__": 230,
+    "__docId__": 228,
     "kind": "method",
     "name": "remove",
     "memberof": "src/lib/pool/message.js~MessagePool",
@@ -4707,7 +4659,7 @@
     "return": null
   },
   {
-    "__docId__": 231,
+    "__docId__": 229,
     "kind": "file",
     "name": "src/lib/pool/transaction.js",
     "content": "export default class TransactionPool {\r\n  get pool() {\r\n    return this._pool\r\n  }\r\n  constructor() {\r\n    this._pool = []\r\n  }\r\n  \r\n  add(tx) {\r\n    this._pool.push(tx)\r\n  }\r\n  \r\n  remove(tx) {\r\n    const index = this._pool.indexOf(tx)\r\n    this._pool.splice(index, 1)\r\n  }\r\n}",
@@ -4718,7 +4670,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 232,
+    "__docId__": 230,
     "kind": "class",
     "name": "TransactionPool",
     "memberof": "src/lib/pool/transaction.js",
@@ -4734,7 +4686,7 @@
     "interface": false
   },
   {
-    "__docId__": 233,
+    "__docId__": 231,
     "kind": "get",
     "name": "pool",
     "memberof": "src/lib/pool/transaction.js~TransactionPool",
@@ -4753,7 +4705,7 @@
     }
   },
   {
-    "__docId__": 234,
+    "__docId__": 232,
     "kind": "constructor",
     "name": "constructor",
     "memberof": "src/lib/pool/transaction.js~TransactionPool",
@@ -4767,7 +4719,7 @@
     "undocument": true
   },
   {
-    "__docId__": 235,
+    "__docId__": 233,
     "kind": "member",
     "name": "_pool",
     "memberof": "src/lib/pool/transaction.js~TransactionPool",
@@ -4784,7 +4736,7 @@
     }
   },
   {
-    "__docId__": 236,
+    "__docId__": 234,
     "kind": "method",
     "name": "add",
     "memberof": "src/lib/pool/transaction.js~TransactionPool",
@@ -4807,7 +4759,7 @@
     "return": null
   },
   {
-    "__docId__": 237,
+    "__docId__": 235,
     "kind": "method",
     "name": "remove",
     "memberof": "src/lib/pool/transaction.js~TransactionPool",
@@ -4830,7 +4782,7 @@
     "return": null
   },
   {
-    "__docId__": 238,
+    "__docId__": 236,
     "kind": "file",
     "name": "src/lib/transaction.js",
     "content": "import { config, debug } from './../utils';\r\nimport { isValid } from './network/validate.js';\r\nimport { TransactionError } from './errors.js';\r\nimport { transactionInputHash, transactionHash } from './hash.js';\r\nimport {chain, mempool} from './dagchain/dagchain';\r\nimport { randomBytes } from 'crypto';\r\nimport { encode, decode } from 'bs58';\r\nimport { getUnspentForAddress } from './dagchain/dagchain-interface';\r\nimport MultiWallet from 'multi-wallet';\r\nimport { network, consensusSubsidyInterval, reward } from '../params.js';\r\nimport * as ipldLfcTx from 'ipld-lfc-tx';\r\n\r\nconst { LFCTx, util } = ipldLfcTx\r\n/**\r\n * validate transaction\r\n *\r\n * @param transaction\r\n * @param unspent\r\n */\r\nexport const validateTransaction = async (multihash, transaction, unspent) => {\r\n\tif (!transaction.reward) delete transaction.reward\r\n\tconst outputs = transaction.outputs.map(o => {\r\n\t\t// TODO: fix script\r\n\t\tif (!o.script) delete o.script\r\n\t\treturn o\r\n\t})\r\n\ttransaction.outputs = outputs\r\n\tif (!transaction.script) delete transaction.script\r\n\tif (!isValid('transaction', transaction)) throw new TransactionError('Invalid transaction');\r\n\tif (multihash !== await transactionHash(transaction)) throw TransactionError('Invalid transaction hash');\r\n\t// TODO: versions should be handled here...\r\n\t// Verify each input signature\r\n\t\r\n\tif (transaction.inputs) {\r\n\t\ttransaction.inputs.forEach(input => {\r\n\t  \tconst { signature, address } = input;\r\n\t\t\tconst hash = transactionInputHash(input);\r\n\r\n\t  \tlet wallet = new MultiWallet(network === 'olivia' ? 'leofcoin:olivia' : 'leofcoin');\r\n\t    wallet.fromAddress(address, null, network === 'olivia' ? 'leofcoin:olivia' : 'leofcoin');\r\n\t\t\t\r\n\t\t\tif (!wallet.verify(Buffer.from(signature, 'hex'), Buffer.from(hash, 'hex')))\r\n\t\t\t\tthrow TransactionError('Invalid input signature');\r\n\t\t});\r\n\t\r\n\t\t// Check if inputs are in unspent list\r\n\t\ttransaction.inputs.forEach((input) => {\r\n\t\t\tif (!unspent.find(out => out.tx === input.tx && out.index === input.index)) { throw TransactionError('Input has been already spent: ' + input.tx); }\r\n\t\t});\t\r\n\t}\r\n\t\r\n\tif (transaction.reward === 'mined') {\r\n\t\t// For reward transaction: check if reward output is correct\r\n\t\tif (transaction.outputs.length !== 1) throw TransactionError('Reward transaction must have exactly one output');\r\n\t\tif (transaction.outputs[0].amount !== config.reward) throw TransactionError(`Mining reward must be exactly: ${config.reward}`);\r\n\t} else if (transaction.inputs) {\r\n\t\t// For normal transaction: check if total output amount equals input amount\r\n\t\tif (transaction.inputs.reduce((acc, input) => acc + input.amount, 0) !==\r\n      transaction.outputs.reduce((acc, output) => acc + output.amount, 0)) { throw TransactionError('Input and output amounts do not match'); }\r\n\t}\r\n\r\n\treturn true;\r\n};\r\n\r\n/**\r\n * validate transactions list for current block\r\n *\r\n * @param {array} transactions\r\n * @param unspent\r\n */\r\nexport const validateTransactions = async (transactions, unspent) => {\r\n\tconst _transactions = []\r\n\tfor (const {multihash} of transactions) {\r\n\t\tconst { value } = await global.ipfs.dag.get(multihash)\r\n\t\tconst tx = new LFCTx(value)\r\n\t\t_transactions.push({multihash, value: tx.toJSON()})\r\n\t\t\r\n\t}\r\n\tfor (const {value, multihash} of _transactions) {\r\n\t\t// TODO: fix value.scrip\r\n\t\tawait validateTransaction(multihash, value, unspent)\r\n\t}\r\n\t\r\n\tif (_transactions.filter(({value}) => value.reward === 'mined').length !== 1)\r\n\t\tthrow TransactionError('Transactions cannot have more than one reward')\t\r\n};\r\n\r\n/**\r\n * Create transaction\r\n *\r\n * @param inputs\r\n * @param outputs\r\n * @param reward\r\n * @return {{id: string, reward: boolean, inputs: *, outputs: *, hash: string}}\r\n */\r\nconst newTransaction = async (inputs, outputs, reward = null) => {\r\n\ttry {\r\n\t\tconst tx = new LFCTx({\r\n\t\t\tid: randomBytes(32).toString('hex'),\r\n\t\t\ttime: Math.floor(new Date().getTime() / 1000),\r\n\t\t\treward,\r\n\t\t\toutputs,\r\n\t\t\tinputs\r\n\t\t});\r\n\t\tconst cid = await util.cid(tx.serialize())\r\n\t\tdebug(`create transaction: ${tx}`);\r\n\t\tawait global.ipfs.dag.put(tx, {format: util.codec, hashAlg: util.defaultHashAlg, version: 1, baseFormat: 'base58btc'})\r\n\t\treturn { multihash: cid.toBaseEncodedString(), size: tx.size};\r\n\t} catch (e) {\r\n\t\tthrow e\r\n\t}\r\n};\r\n\r\nexport const consensusSubsidy = height => {\r\n\tconst quarterlings = height / consensusSubsidyInterval;\r\n\tif (quarterlings >= 256) {\r\n\t\treturn 0;\r\n\t}\r\n\t//subsidy is lowered by 12.5 %, approx every year\r\n\tconst minus = quarterlings >= 1 ? (quarterlings * (reward / 256)) : 0;\r\n\treturn reward - minus;\r\n};\r\n\r\n/**\r\n * Create reward transaction for block mining\r\n *\r\n * @param {string} address\r\n * @return {id: string, reward: boolean, inputs: *, outputs: *, hash: string}\r\n */\r\nexport const createRewardTransaction = async (address, height) => {\r\n\treturn newTransaction([], [{index: 0, amount: consensusSubsidy(height), address}], 'mined');\r\n};\r\n\r\nconst verifySignature = (address, signature, hash) => {\r\n\tconst wallet = new MultiWallet(network === 'olivia' ? 'leofcoin:olivia' : 'leofcoin');\r\n\treturn wallet.verify(signature, hash, address);\r\n};\r\n\r\n/**\r\n * Create and sign input\r\n *\r\n * @param transaction Based on transaction id\r\n * @param index Based on transaction output index\r\n * @param amount\r\n * @param wallet\r\n * @return {transaction, index, amount, address}\r\n */\r\nconst createInput = (tx, index, amount, wallet) => {\r\n\tconst input = {\r\n\t\ttx,\r\n\t\tindex,\r\n\t\tamount,\r\n\t\taddress: wallet.address,\r\n\t};\r\n\t// TODO: show notification the tx got signed\r\n\t// Sign transactionHash\r\n\tinput.signature = wallet.sign(Buffer.from(transactionInputHash(input), 'hex')).toString('hex');\r\n\treturn input;\r\n};\r\n\r\n/**\r\n * Create a transaction\r\n *\r\n * @param wallet\r\n * @param toAddress\r\n * @param amount\r\n * @param unspent\r\n * @return {id, reward, inputs, outputs, hash,}\r\n */\r\nexport const buildTransaction = async (wallet, toAddress, amount) => {\r\n\tlet inputsAmount = 0;\r\n\tconst unspent = await getUnspentForAddress(wallet.address);\r\n\tconst inputsRaw = unspent.filter(i => {\r\n\t\tconst more = inputsAmount < amount;\r\n\t\tif (more) inputsAmount += i.amount;\r\n\t\treturn more;\r\n\t});\r\n\tif (inputsAmount < amount) throw TransactionError('Not enough funds');\r\n\t// TODO: Add multiSigning\r\n\tconst inputs = inputsRaw.map(i => createInput(i.tx, i.index, i.amount, wallet));\r\n\t// Send amount to destination address\r\n\tconst outputs = [{index: 0, amount, address: toAddress}];\r\n\t// Send back change to my wallet\r\n\tif (inputsAmount - amount > 0) {\r\n\t\toutputs.push({index: 1, amount: inputsAmount - amount, address: wallet.address});\r\n\t}\r\n\treturn newTransaction(inputs, outputs);\r\n};\r\n",
@@ -4841,7 +4793,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 239,
+    "__docId__": 237,
     "kind": "variable",
     "name": "LFCTx",
     "memberof": "src/lib/transaction.js",
@@ -4862,7 +4814,7 @@
     "ignore": true
   },
   {
-    "__docId__": 240,
+    "__docId__": 238,
     "kind": "function",
     "name": "validateTransaction",
     "memberof": "src/lib/transaction.js",
@@ -4905,7 +4857,7 @@
     }
   },
   {
-    "__docId__": 241,
+    "__docId__": 239,
     "kind": "function",
     "name": "validateTransactions",
     "memberof": "src/lib/transaction.js",
@@ -4944,7 +4896,7 @@
     "return": null
   },
   {
-    "__docId__": 242,
+    "__docId__": 240,
     "kind": "function",
     "name": "newTransaction",
     "memberof": "src/lib/transaction.js",
@@ -5001,7 +4953,7 @@
     "ignore": true
   },
   {
-    "__docId__": 243,
+    "__docId__": 241,
     "kind": "function",
     "name": "consensusSubsidy",
     "memberof": "src/lib/transaction.js",
@@ -5031,7 +4983,7 @@
     }
   },
   {
-    "__docId__": 244,
+    "__docId__": 242,
     "kind": "function",
     "name": "createRewardTransaction",
     "memberof": "src/lib/transaction.js",
@@ -5067,7 +5019,7 @@
     }
   },
   {
-    "__docId__": 245,
+    "__docId__": 243,
     "kind": "function",
     "name": "verifySignature",
     "memberof": "src/lib/transaction.js",
@@ -5110,7 +5062,7 @@
     "ignore": true
   },
   {
-    "__docId__": 246,
+    "__docId__": 244,
     "kind": "function",
     "name": "createInput",
     "memberof": "src/lib/transaction.js",
@@ -5177,7 +5129,7 @@
     "ignore": true
   },
   {
-    "__docId__": 247,
+    "__docId__": 245,
     "kind": "function",
     "name": "buildTransaction",
     "memberof": "src/lib/transaction.js",
@@ -5243,10 +5195,10 @@
     }
   },
   {
-    "__docId__": 248,
+    "__docId__": 246,
     "kind": "file",
     "name": "src/lib/wallet-utils.js",
-    "content": "import MultiWallet from 'multi-wallet';\r\nimport { readFile, writeFile } from 'fs';\r\nimport { network, networkConfigPath, walletPath } from '../params';\r\nimport { debug } from './../utils'\r\nimport {promisify} from 'util'\r\n\r\nconst write = promisify(writeFile)\r\nconst read = promisify(readFile)\r\n\r\nglobalThis.leofcoin = globalThis.leofcoin || {}\r\n// TODO: encrypt\r\nexport const writeWallet = async multiWIF => {\r\n\tawait walletStore.put()\r\n\tawait write(walletPath, JSON.stringify(multiWIF))\r\n};\r\n\r\nexport const readWallet = async () => {\r\n\tconst wallet = await read(walletPath);\r\n\treturn JSON.parse(wallet.toString())\r\n}\r\n\r\nexport const generateWallet = async () => {\r\n\tconsole.log(`Generating wallet for network ${network}`);\n  const config = await read(networkConfigPath, 'json');\n  // console.log(config.Identity.PrivKey);\n  // console.warn('wallet encrypted using your peer privatKey');\n  // TODO: encrypt the wallet\n  // TODO: update network param, support <net> & <net>:<purpose> scheme\r\n\tlet wallet = new MultiWallet(network === 'olivia' ? 'leofcoin:olivia' : 'leofcoin');\r\n\tconst mnemonic = wallet.generate();\n  const account = wallet.account(0);\n  wallet = {\n    mnemonic,\n    multiWIF: wallet.export(),\n    accounts: ['main account', account.external(0).address]\n  }\n\tawait walletStore.put(wallet)\r\n\treturn wallet;\r\n};\n\nexport const accountTree = () => {\n  const { accounts } = discoverAccounts();\n}\n\nexport const _discoverAccounts = async (account, depth = 0) => {\n  const accounts = [];\n  const discover = async (account, depth) => {\n    const external = account.external(depth);\n    const internal = account.internal(depth);\n    const tx = [];\n    accounts.push(account);\n    for (const { transactions } of global.chain) {\n      if (accounts[external.address] || accounts[internal.address]) return;\n\t\t\tfor (let transaction of transactions) {\n\t\t\t\tconst {multihash} = transaction\n\t\t\t\tlet inputs\n\t\t\t\tlet outputs\n\t\t\t\t\n\t\t\t\tif (multihash) {\n\t\t\t\t\ttransaction = await leofcoin.transaction.get(multihash)\n\t\t\t\t}\n\t\t\t\tif (tx[internal.address] || tx[external.address]) return;\n\t\t\t\tif (transaction.inputs) transaction.inputs.forEach((i) => {\n\t\t\t\t\tif (i.address === internal.address) return tx.push(internal.address);\n\t\t\t\t\tif (i.address === external.address) return tx.push(external.address);\n\t\t\t\t})\n\t\t\t\tif (transaction.outputs) transaction.outputs.forEach((o) => {\n\t\t\t\t\tif (o.address === internal.address) return tx.push(internal.address);\n\t\t\t\t\tif (o.address === external.address) return tx.push(external.address);\n\t\t\t\t})\t\n\t\t\t}\n    }\n    // discover untill we find no transactions for given address\n    if (tx.length > 0) return discover(account, depth + 1);\n    return accounts;\n  }\n\n  return discover(account, 0);\n\n}\r\n\r\n/**\r\n * @param {object} root Instance of MultiWallet\r\n */\r\nexport const discoverAccounts = async (root) => {\r\n  let accounts = [];\r\n  /**\r\n   * @param {number} depth account depth\r\n   */\r\n  const discover = async depth => {\r\n\t\tconst tx = [];\n\t\t\n\t\t\tdebug('discovering accounts')\n    const account = root.account(depth);\n    const _accounts = await _discoverAccounts(account);\n    accounts = [...accounts, _accounts];\r\n\t\t\r\n\t\tdebug('done discovering accounts')\r\n\t\tif (_accounts.length > 1) return discover(depth + 1);\r\n    return accounts;\r\n  }\r\n\r\n  return discover(0);\r\n\r\n}\n\nexport const discoverAccountsByName = (root, depth) => {\n\tdebug('discovering accounts by name')\n  const accounts = [];\n  /**\n   * @param {number} depth account depth\n   */\n  const discover = depth => {\n\t\tconst tx = []\n    const account = root.derive(`m/${depth}\\'/0/0`);\n\t\taccounts.push(account);\n    if (call < depth) return discover(depth)\n    return accounts;\n  }\n\tdebug('finished discovering accounts by name')\n  return discover(depth);\n\n}\r\n\r\nexport const loadAccounts = wallet => {\r\n\tdebug('loading accounts')\r\n  const accounts = discoverAccounts(wallet);\r\n\tdebug('finished loading accounts')\r\n  return accounts;\r\n}\r\n\r\nexport const loadWallet = async () => {\r\n\tdebug('loading wallet')\r\n  try {\r\n    const saved = await readWallet();\n    // TODO: update network param, support <net> & <net>:<purpose> scheme\r\n    const root = new MultiWallet(network === 'olivia' ? 'leofcoin:olivia' : 'leofcoin');\r\n    // TODO: https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki#Account_discovery @AndrewVanardennen @vandeurenglenn\r\n    // last account is without tx\r\n    // disallow account creation when previous account has no tx\r\n    root.import(saved.multiWIF);\r\n\t\tdebug('done loading wallet')\r\n    return root;\r\n  } catch (e) {\r\n    throw e;\r\n  }\r\n}\r\n",
+    "content": "import MultiWallet from 'multi-wallet';\r\nimport { readFile, writeFile } from 'fs';\r\nimport { network, networkConfigPath, walletPath } from '../params';\r\nimport { debug } from './../utils'\r\nimport {promisify} from 'util'\r\n\r\nconst write = promisify(writeFile)\r\nconst read = promisify(readFile)\r\n\r\nglobalThis.leofcoin = globalThis.leofcoin || {}\r\n// TODO: encrypt\r\n\r\nexport const readWallet = async () => {\r\n\tconst wallet = await walletStore.get('identity');\r\n\treturn wallet.multiWIF\r\n}\r\n\r\nexport const accountTree = () => {\r\n  const { accounts } = discoverAccounts();\r\n}\r\n\r\nexport const _discoverAccounts = async (account, depth = 0) => {\r\n  const accounts = [];\r\n  const discover = async (account, depth) => {\r\n    const external = account.external(depth);\r\n    const internal = account.internal(depth);\r\n    const tx = [];\r\n    accounts.push(account);\r\n    for (const { transactions } of global.chain) {\r\n      if (accounts[external.address] || accounts[internal.address]) return;\r\n\t\t\tfor (let transaction of transactions) {\r\n\t\t\t\tconst {multihash} = transaction\r\n\t\t\t\tlet inputs\r\n\t\t\t\tlet outputs\r\n\t\t\t\t\r\n\t\t\t\tif (multihash) {\r\n\t\t\t\t\ttransaction = await leofcoin.transaction.get(multihash)\r\n\t\t\t\t}\r\n\t\t\t\tif (tx[internal.address] || tx[external.address]) return;\r\n\t\t\t\tif (transaction.inputs) transaction.inputs.forEach((i) => {\r\n\t\t\t\t\tif (i.address === internal.address) return tx.push(internal.address);\r\n\t\t\t\t\tif (i.address === external.address) return tx.push(external.address);\r\n\t\t\t\t})\r\n\t\t\t\tif (transaction.outputs) transaction.outputs.forEach((o) => {\r\n\t\t\t\t\tif (o.address === internal.address) return tx.push(internal.address);\r\n\t\t\t\t\tif (o.address === external.address) return tx.push(external.address);\r\n\t\t\t\t})\t\r\n\t\t\t}\r\n    }\r\n    // discover untill we find no transactions for given address\r\n    if (tx.length > 0) return discover(account, depth + 1);\r\n    return accounts;\r\n  }\r\n\r\n  return discover(account, 0);\r\n\r\n}\r\n\r\n/**\r\n * @param {object} root Instance of MultiWallet\r\n */\r\nexport const discoverAccounts = async (root) => {\r\n  let accounts = [];\r\n  /**\r\n   * @param {number} depth account depth\r\n   */\r\n  const discover = async depth => {\r\n\t\tconst tx = [];\r\n\t\t\r\n\t\t\tdebug('discovering accounts')\r\n    const account = root.account(depth);\r\n    const _accounts = await _discoverAccounts(account);\r\n    accounts = [...accounts, _accounts];\r\n\t\t\r\n\t\tdebug('done discovering accounts')\r\n\t\tif (_accounts.length > 1) return discover(depth + 1);\r\n    return accounts;\r\n  }\r\n\r\n  return discover(0);\r\n\r\n}\r\n\r\nexport const discoverAccountsByName = (root, depth) => {\r\n\tdebug('discovering accounts by name')\r\n  const accounts = [];\r\n  /**\r\n   * @param {number} depth account depth\r\n   */\r\n  const discover = depth => {\r\n\t\tconst tx = []\r\n    const account = root.derive(`m/${depth}\\'/0/0`);\r\n\t\taccounts.push(account);\r\n    if (call < depth) return discover(depth)\r\n    return accounts;\r\n  }\r\n\tdebug('finished discovering accounts by name')\r\n  return discover(depth);\r\n\r\n}\r\n\r\nexport const loadAccounts = wallet => {\r\n\tdebug('loading accounts')\r\n  const accounts = discoverAccounts(wallet);\r\n\tdebug('finished loading accounts')\r\n  return accounts;\r\n}\r\n\r\nexport const loadWallet = async () => {\r\n\tdebug('loading wallet')\r\n  try {\r\n    const saved = await readWallet();\r\n    // TODO: update network param, support <net> & <net>:<purpose> scheme\r\n    const root = new MultiWallet(network === 'olivia' ? 'leofcoin:olivia' : 'leofcoin');\r\n    // TODO: https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki#Account_discovery @AndrewVanardennen @vandeurenglenn\r\n    // last account is without tx\r\n    // disallow account creation when previous account has no tx\r\n    root.import(saved);\r\n\t\tdebug('done loading wallet')\r\n    return root;\r\n  } catch (e) {\r\n    throw e;\r\n  }\r\n}\r\n",
     "static": true,
     "longname": "D:/Workspace-laptop/leofcoin/core/src/lib/wallet-utils.js",
     "access": "public",
@@ -5254,7 +5206,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 249,
+    "__docId__": 247,
     "kind": "variable",
     "name": "write",
     "memberof": "src/lib/wallet-utils.js",
@@ -5275,7 +5227,7 @@
     "ignore": true
   },
   {
-    "__docId__": 250,
+    "__docId__": 248,
     "kind": "variable",
     "name": "read",
     "memberof": "src/lib/wallet-utils.js",
@@ -5296,33 +5248,7 @@
     "ignore": true
   },
   {
-    "__docId__": 251,
-    "kind": "function",
-    "name": "writeWallet",
-    "memberof": "src/lib/wallet-utils.js",
-    "generator": false,
-    "async": true,
-    "static": true,
-    "longname": "src/lib/wallet-utils.js~writeWallet",
-    "access": "public",
-    "export": true,
-    "importPath": "@leofcoin/core/src/lib/wallet-utils.js",
-    "importStyle": "{writeWallet}",
-    "description": null,
-    "lineNumber": 12,
-    "undocument": true,
-    "params": [
-      {
-        "name": "multiWIF",
-        "types": [
-          "*"
-        ]
-      }
-    ],
-    "return": null
-  },
-  {
-    "__docId__": 252,
+    "__docId__": 249,
     "kind": "function",
     "name": "readWallet",
     "memberof": "src/lib/wallet-utils.js",
@@ -5335,7 +5261,7 @@
     "importPath": "@leofcoin/core/src/lib/wallet-utils.js",
     "importStyle": "{readWallet}",
     "description": null,
-    "lineNumber": 17,
+    "lineNumber": 13,
     "undocument": true,
     "params": [],
     "return": {
@@ -5345,30 +5271,7 @@
     }
   },
   {
-    "__docId__": 253,
-    "kind": "function",
-    "name": "generateWallet",
-    "memberof": "src/lib/wallet-utils.js",
-    "generator": false,
-    "async": true,
-    "static": true,
-    "longname": "src/lib/wallet-utils.js~generateWallet",
-    "access": "public",
-    "export": true,
-    "importPath": "@leofcoin/core/src/lib/wallet-utils.js",
-    "importStyle": "{generateWallet}",
-    "description": null,
-    "lineNumber": 22,
-    "undocument": true,
-    "params": [],
-    "return": {
-      "types": [
-        "*"
-      ]
-    }
-  },
-  {
-    "__docId__": 254,
+    "__docId__": 250,
     "kind": "function",
     "name": "accountTree",
     "memberof": "src/lib/wallet-utils.js",
@@ -5381,13 +5284,13 @@
     "importPath": "@leofcoin/core/src/lib/wallet-utils.js",
     "importStyle": "{accountTree}",
     "description": null,
-    "lineNumber": 41,
+    "lineNumber": 18,
     "undocument": true,
     "params": [],
     "return": null
   },
   {
-    "__docId__": 255,
+    "__docId__": 251,
     "kind": "function",
     "name": "_discoverAccounts",
     "memberof": "src/lib/wallet-utils.js",
@@ -5400,7 +5303,7 @@
     "importPath": "@leofcoin/core/src/lib/wallet-utils.js",
     "importStyle": "{_discoverAccounts}",
     "description": null,
-    "lineNumber": 45,
+    "lineNumber": 22,
     "undocument": true,
     "params": [
       {
@@ -5426,7 +5329,7 @@
     }
   },
   {
-    "__docId__": 256,
+    "__docId__": 252,
     "kind": "function",
     "name": "discoverAccounts",
     "memberof": "src/lib/wallet-utils.js",
@@ -5439,7 +5342,7 @@
     "importPath": "@leofcoin/core/src/lib/wallet-utils.js",
     "importStyle": "{discoverAccounts}",
     "description": "",
-    "lineNumber": 85,
+    "lineNumber": 62,
     "params": [
       {
         "nullable": null,
@@ -5459,7 +5362,7 @@
     }
   },
   {
-    "__docId__": 257,
+    "__docId__": 253,
     "kind": "function",
     "name": "discoverAccountsByName",
     "memberof": "src/lib/wallet-utils.js",
@@ -5472,7 +5375,7 @@
     "importPath": "@leofcoin/core/src/lib/wallet-utils.js",
     "importStyle": "{discoverAccountsByName}",
     "description": null,
-    "lineNumber": 107,
+    "lineNumber": 84,
     "undocument": true,
     "params": [
       {
@@ -5495,7 +5398,7 @@
     }
   },
   {
-    "__docId__": 258,
+    "__docId__": 254,
     "kind": "function",
     "name": "loadAccounts",
     "memberof": "src/lib/wallet-utils.js",
@@ -5508,7 +5411,7 @@
     "importPath": "@leofcoin/core/src/lib/wallet-utils.js",
     "importStyle": "{loadAccounts}",
     "description": null,
-    "lineNumber": 125,
+    "lineNumber": 102,
     "undocument": true,
     "params": [
       {
@@ -5525,7 +5428,7 @@
     }
   },
   {
-    "__docId__": 259,
+    "__docId__": 255,
     "kind": "function",
     "name": "loadWallet",
     "memberof": "src/lib/wallet-utils.js",
@@ -5538,7 +5441,7 @@
     "importPath": "@leofcoin/core/src/lib/wallet-utils.js",
     "importStyle": "{loadWallet}",
     "description": null,
-    "lineNumber": 132,
+    "lineNumber": 109,
     "undocument": true,
     "params": [],
     "return": {
@@ -5548,7 +5451,7 @@
     }
   },
   {
-    "__docId__": 260,
+    "__docId__": 256,
     "kind": "file",
     "name": "src/lib/workers/miner-worker.js",
     "content": "import calculateHash from './../dagchain/calculate-hash';\r\nimport getDifficulty from '../../difficulty';\r\n\r\nconst hashes = nonce => {\r\n\tconst hashrates = [10000];\r\n\tfor (let i = hashrates.length; --i > 0;) {\r\n\t\tif (nonce % hashrates[i - 1] === 0) return hashrates[i - 1];\r\n\t}\r\n\treturn hashrates.filter(hashrate => {\r\n\t\tif (nonce % hashrate === 0) return hashrate;\r\n\t});\r\n};\r\n\r\nexport default (() => {\r\n\tprocess.on('message', async ({block, difficulty}) => {\r\n  \tconst stop = () => resolve(null);\r\n  \tlet hashCount = 0;\r\n\t\tblock.hash = await calculateHash(block);\r\n  \twhile (getDifficulty(block.hash) >= difficulty) {\r\n  \t\tblock.nonce = Math.floor(Math.random() * 1000000001)\r\n  \t\tblock.hash = await calculateHash(block);\r\n  \t\thashCount = hashCount + Number(hashes(block.nonce));\r\n  \t}\r\n  \tprocess.send({ block, hashCount });\r\n\t});\r\n\r\n})();\r\n",
@@ -5559,7 +5462,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 261,
+    "__docId__": 257,
     "kind": "function",
     "name": "hashes",
     "memberof": "src/lib/workers/miner-worker.js",
@@ -5590,7 +5493,7 @@
     "ignore": true
   },
   {
-    "__docId__": 262,
+    "__docId__": 258,
     "kind": "file",
     "name": "src/ms.js",
     "content": "\r\nexport const sec = sec => sec * 1000\r\nexport const min = min => min * 60000\r\nexport const hour = hour => hour * 3.6e+6\r\nexport const day = day => day * 8.64e+7\r\nexport const week = week => week * 6.048e+8\r\nexport const month = month => month * 2.628e+9",
@@ -5601,7 +5504,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 263,
+    "__docId__": 259,
     "kind": "function",
     "name": "sec",
     "memberof": "src/ms.js",
@@ -5627,7 +5530,7 @@
     "return": null
   },
   {
-    "__docId__": 264,
+    "__docId__": 260,
     "kind": "function",
     "name": "min",
     "memberof": "src/ms.js",
@@ -5653,7 +5556,7 @@
     "return": null
   },
   {
-    "__docId__": 265,
+    "__docId__": 261,
     "kind": "function",
     "name": "hour",
     "memberof": "src/ms.js",
@@ -5679,7 +5582,7 @@
     "return": null
   },
   {
-    "__docId__": 266,
+    "__docId__": 262,
     "kind": "function",
     "name": "day",
     "memberof": "src/ms.js",
@@ -5705,7 +5608,7 @@
     "return": null
   },
   {
-    "__docId__": 267,
+    "__docId__": 263,
     "kind": "function",
     "name": "week",
     "memberof": "src/ms.js",
@@ -5731,7 +5634,7 @@
     "return": null
   },
   {
-    "__docId__": 268,
+    "__docId__": 264,
     "kind": "function",
     "name": "month",
     "memberof": "src/ms.js",
@@ -5757,7 +5660,7 @@
     "return": null
   },
   {
-    "__docId__": 269,
+    "__docId__": 265,
     "kind": "file",
     "name": "src/params.js",
     "content": "import { join } from 'path';\r\nimport { homedir } from 'os';\r\nimport * as bs58 from 'bs58';\nimport coinTicker from 'coin-ticker';\nimport {median} from './utils';\nimport {hour} from './ms'\nconst { decode, encode } = bs58\r\nconst argv = process.argv;\r\n\r\nexport const networks = {\r\n\t'leofcoin': join(homedir(), '.leofcoin'),\r\n\t'olivia': join(homedir(), '.leofcoin/olivia')\r\n};\r\n\r\nexport const network = (() => {\r\n  const index = argv.indexOf('--network');\r\n  return process.env.NETWORK || (index > -1) ? argv[index + 1] : 'olivia';\r\n})()\r\n\r\nexport const fixIndex = argv.indexOf('fixIndex') !== -1 ? true : false;\r\n\r\nexport const genesis = (() => {\r\n\tif (argv.indexOf('genesis') !== -1) return true;\r\n\tif (argv.indexOf('init') !== -1) return true;\r\n  return false;\r\n})()\r\n\r\nexport const verbose = argv.indexOf('--verbose') !==  -1\r\n\r\nif (verbose) {\r\n  process.env.DEBUG = true;\r\n}\n\r\nexport const olivia = process.argv.includes('olivia') || process.argv.includes('testnet');\r\nexport const AppData = join(homedir(), 'AppData', 'Roaming', olivia ? 'Leofcoin/olivia' : 'Leofcoin');\r\n// const netHash = net => encode(keccak(Buffer.from(`${net}-`), 256)).slice(0, 24);\r\nexport const APPDATAPATH = (() => {\r\n  switch (process.platform) {\r\n    case 'win32':\r\n      return join(homedir(), 'AppData', 'Roaming', 'Leofcoin', olivia ? 'olivia' : '')\r\n      break;\r\n    case 'linux':\r\n      return join(homedir(), '.leofcoin', olivia ? 'olivia' : '')\r\n      break;\r\n    case 'darwin':\r\n      // TODO: implement darwin path\r\n      break;\r\n    case 'android':\r\n      // TODO: implement android path\r\n      // experimental\r\n      break;\r\n  }\r\n})();\r\n\n\n// export const netPrefix = (async () => await dapnets('leofcoin').netPrefix)()\n\r\nexport const walletPath = join(APPDATAPATH, 'wallet.dat');\r\n\r\nexport const signalServers = (() => {\r\n  if (network === 'olivia') return [\n\t\t// '/dns4/star.leofcoin.org/tcp/4003/wss/ipfs/QmbRqQkqqXbEH9y4jMg1XywAcwJCk4U8ZVaYZtjHdXKhpL',\n\t\t// '/dns4/star.leofcoin.org/tcp/4020/p2p/QmbRqQkqqXbEH9y4jMg1XywAcwJCk4U8ZVaYZtjHdXKhpL'\n    ]\r\n  else return [\n\t\t// '/dns4/star.leofcoin.org/tcp/4003/wss/ipfs/QmbRqQkqqXbEH9y4jMg1XywAcwJCk4U8ZVaYZtjHdXKhpL',\n    // '/dns4/star.leofcoin.org/tcp/4020/p2p/QmbRqQkqqXbEH9y4jMg1XywAcwJCk4U8ZVaYZtjHdXKhpL'\n    ]\r\n})()\r\n\r\nexport const netKeys = {\r\n  olivia: `/key/swarm/psk/1.0.0/\r\n  /base16/\r\n  b37e0b6f3574931ce7a0ef863f64b0f01ba111bb7fabb6a661fc67b51b4ddd15`,\r\n  leofcoin: `/key/swarm/psk/1.0.0/\r\n  /base16/\r\n  0b78a0dcb430dd77311ab6629aa6b75fa05c6779a567dcc176b2299853e6f746`\r\n}\r\n\r\nexport const netKey = netKeys[network];\r\nexport const networkPath = networks[network];\nexport const networkConfigPath = join(networkPath, 'config');\r\nexport const netKeyPath = join(networkPath, 'swarm.key');\r\nexport const localCurrent = join(networkPath, 'db', 'current');\r\nexport const localIndex = join(networkPath, 'db', 'index');\r\nexport const localDAGAddress = join(networkPath, 'db', 'dag.multiaddress');\r\n// export const\r\n// TODO: remove seed once we have a static ip for our ipfs daemon node\r\n// untill seed is removed we retrieve the keys using socket.io\r\n// TODO: make AppData overwriteable\r\nexport const seed = 'https://septimal-balinese-2547.dataplicity.io';\r\nexport const seeds = 'QmNeApjecrZezN8Hp24BbScuM1Y9f1Mgxbd9hBxfNoNrMP';\r\nexport const configPath = join(AppData, 'core.config');\r\nexport const reward = 150;\r\nexport const consensusSubsidyInterval = 52500;\r\nexport const consensusSubsidyPercentage = 12.5; // quarterlings\r\n// export const genesisCID = '122045f96ab0a6c8a689eaec29eb71333294b985fb25b7409a938b6879702a38b659';\nexport const genesisLink = 'zsNS6wZiHUW66J9M1iZ6wnsWS7z52acyZTTWUFgoZPaWaAevd7EQg7u91zRKkoNBHsgH33XY6xPDSbcZJp4Rtfst5K863z';\r\nexport const genesisCID = 'zsNS6wZiHUW66J9M1iZ6wnsWS7z52acyZTTWUFgoZPaWaAevd7EQg7u91zRKkoNBHsgH33XY6xPDSbcZJp4Rtfst5K863z';\r\nexport const GENESISBS58 = 'EKBqhKsFG14thpzEKUbbb94WG9a1p9sm82YQ2YwK6wkme4C1df2dMwggnDgh74zZsBx2UbWi1qDQLysrrU3YKJ6V73sLtASepYieNpx8Fwjxyjh6xWNYToTNbNkp1geiSWq6fneGvn76H2cqMnq';\r\nexport const GENESISBLOCK = {\n\tindex: 0,\n  prevHash: Buffer.alloc(47).toString('hex'),\n  time: 1581375185,\n  transactions: [],\n  nonce: 33336\n};\r\n\r\nexport const checkpoints = [\r\n];\r\n/**\r\n * stablecoin support\r\n *\r\n * set to true for a pegged coin\r\n */\r\nconst pegged = true\r\nconst stable = {}\r\nconst exchanges = coinTicker()\r\nglobalThis.priceMap = new Map();\r\nconst getPairValue = async (pairs) => {\r\n\tconst value = {}\r\n\t\tconst prices = {}\r\n\tfor (const exchange of exchanges) {\r\n\t\ttry {\r\n\t\t\tfor (const pair of pairs) {\r\n\t\t\t\tconst result = await coinTicker(exchange, pair);\r\n\t\t\t\tprices[pair] = []\r\n\t\t\t\tif (result && result.last) {\r\n\t\t\t\t  prices[pair].push(1 / Number(result.last))\r\n\t\t\t\t} else {\r\n\t\t\t\t\texchanges.splice(exchanges.indexOf(exchange))\r\n\t\t\t\t}\t\r\n\t\t\t}\r\n\t\t\t\r\n\t\t\t\r\n\t\t} catch (e) {\r\n\t\t exchanges.splice(exchanges.indexOf(exchange))\r\n\t\t}\r\n\t\t// stable.pairs.set('BTC', getValueFor('BTC'))\r\n\t}\r\n\t\r\n\tfor (const key of Object.keys(prices)) {\r\n\t\tpriceMap.set(key, median(prices[key]))\r\n\t}\r\n\tconsole.log(priceMap.entries());\r\n\t// const name = \r\n}\r\n\r\nif (pegged) {\r\n\tstable.currency = 'EUR';\r\n\tstable.value = 1;\t\r\n\tstable.pairs  = new Map();\r\n\t(async () => await getPairValue(['BTC_EUR', 'LTC_EUR', 'ETH_EUR']))();\r\n\tsetInterval(async () => {\r\n\t\tconst values = await getPairValue(['BTC_EUR', 'LTC_EUR', 'ETH_EUR'])\r\n\t\t// stable.pairs.set('BTC', getValueFor('BTC'))\r\n\t}, hour(1));\r\n}\r\n\r\n\r\n\r\n\r\nexport default {\r\n\tseed,\r\n\tAppData,\r\n\tconfigPath,\r\n\tlocalCurrent,\r\n\tlocalIndex,\r\n\treward,\r\n\tconsensusSubsidyInterval,\r\n\tconsensusSubsidyPercentage\r\n};\r\n",
@@ -5768,7 +5671,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 270,
+    "__docId__": 266,
     "kind": "variable",
     "name": "decode",
     "memberof": "src/params.js",
@@ -5789,7 +5692,7 @@
     "ignore": true
   },
   {
-    "__docId__": 271,
+    "__docId__": 267,
     "kind": "variable",
     "name": "argv",
     "memberof": "src/params.js",
@@ -5810,7 +5713,7 @@
     "ignore": true
   },
   {
-    "__docId__": 272,
+    "__docId__": 268,
     "kind": "variable",
     "name": "networks",
     "memberof": "src/params.js",
@@ -5830,7 +5733,7 @@
     }
   },
   {
-    "__docId__": 273,
+    "__docId__": 269,
     "kind": "variable",
     "name": "network",
     "memberof": "src/params.js",
@@ -5850,7 +5753,7 @@
     }
   },
   {
-    "__docId__": 274,
+    "__docId__": 270,
     "kind": "variable",
     "name": "fixIndex",
     "memberof": "src/params.js",
@@ -5870,7 +5773,7 @@
     }
   },
   {
-    "__docId__": 275,
+    "__docId__": 271,
     "kind": "variable",
     "name": "genesis",
     "memberof": "src/params.js",
@@ -5890,7 +5793,7 @@
     }
   },
   {
-    "__docId__": 276,
+    "__docId__": 272,
     "kind": "variable",
     "name": "verbose",
     "memberof": "src/params.js",
@@ -5910,7 +5813,7 @@
     }
   },
   {
-    "__docId__": 277,
+    "__docId__": 273,
     "kind": "variable",
     "name": "olivia",
     "memberof": "src/params.js",
@@ -5930,7 +5833,7 @@
     }
   },
   {
-    "__docId__": 278,
+    "__docId__": 274,
     "kind": "variable",
     "name": "AppData",
     "memberof": "src/params.js",
@@ -5950,7 +5853,7 @@
     }
   },
   {
-    "__docId__": 279,
+    "__docId__": 275,
     "kind": "variable",
     "name": "APPDATAPATH",
     "memberof": "src/params.js",
@@ -5970,7 +5873,7 @@
     }
   },
   {
-    "__docId__": 280,
+    "__docId__": 276,
     "kind": "variable",
     "name": "walletPath",
     "memberof": "src/params.js",
@@ -5990,7 +5893,7 @@
     }
   },
   {
-    "__docId__": 281,
+    "__docId__": 277,
     "kind": "variable",
     "name": "signalServers",
     "memberof": "src/params.js",
@@ -6010,7 +5913,7 @@
     }
   },
   {
-    "__docId__": 282,
+    "__docId__": 278,
     "kind": "variable",
     "name": "netKeys",
     "memberof": "src/params.js",
@@ -6030,7 +5933,7 @@
     }
   },
   {
-    "__docId__": 283,
+    "__docId__": 279,
     "kind": "variable",
     "name": "netKey",
     "memberof": "src/params.js",
@@ -6050,7 +5953,7 @@
     }
   },
   {
-    "__docId__": 284,
+    "__docId__": 280,
     "kind": "variable",
     "name": "networkPath",
     "memberof": "src/params.js",
@@ -6070,7 +5973,7 @@
     }
   },
   {
-    "__docId__": 285,
+    "__docId__": 281,
     "kind": "variable",
     "name": "networkConfigPath",
     "memberof": "src/params.js",
@@ -6090,7 +5993,7 @@
     }
   },
   {
-    "__docId__": 286,
+    "__docId__": 282,
     "kind": "variable",
     "name": "netKeyPath",
     "memberof": "src/params.js",
@@ -6110,7 +6013,7 @@
     }
   },
   {
-    "__docId__": 287,
+    "__docId__": 283,
     "kind": "variable",
     "name": "localCurrent",
     "memberof": "src/params.js",
@@ -6130,7 +6033,7 @@
     }
   },
   {
-    "__docId__": 288,
+    "__docId__": 284,
     "kind": "variable",
     "name": "localIndex",
     "memberof": "src/params.js",
@@ -6150,7 +6053,7 @@
     }
   },
   {
-    "__docId__": 289,
+    "__docId__": 285,
     "kind": "variable",
     "name": "localDAGAddress",
     "memberof": "src/params.js",
@@ -6170,7 +6073,7 @@
     }
   },
   {
-    "__docId__": 290,
+    "__docId__": 286,
     "kind": "variable",
     "name": "seed",
     "memberof": "src/params.js",
@@ -6190,7 +6093,7 @@
     }
   },
   {
-    "__docId__": 291,
+    "__docId__": 287,
     "kind": "variable",
     "name": "seeds",
     "memberof": "src/params.js",
@@ -6210,7 +6113,7 @@
     }
   },
   {
-    "__docId__": 292,
+    "__docId__": 288,
     "kind": "variable",
     "name": "configPath",
     "memberof": "src/params.js",
@@ -6230,7 +6133,7 @@
     }
   },
   {
-    "__docId__": 293,
+    "__docId__": 289,
     "kind": "variable",
     "name": "reward",
     "memberof": "src/params.js",
@@ -6250,7 +6153,7 @@
     }
   },
   {
-    "__docId__": 294,
+    "__docId__": 290,
     "kind": "variable",
     "name": "consensusSubsidyInterval",
     "memberof": "src/params.js",
@@ -6270,7 +6173,7 @@
     }
   },
   {
-    "__docId__": 295,
+    "__docId__": 291,
     "kind": "variable",
     "name": "consensusSubsidyPercentage",
     "memberof": "src/params.js",
@@ -6290,7 +6193,7 @@
     }
   },
   {
-    "__docId__": 296,
+    "__docId__": 292,
     "kind": "variable",
     "name": "genesisLink",
     "memberof": "src/params.js",
@@ -6310,7 +6213,7 @@
     }
   },
   {
-    "__docId__": 297,
+    "__docId__": 293,
     "kind": "variable",
     "name": "genesisCID",
     "memberof": "src/params.js",
@@ -6330,7 +6233,7 @@
     }
   },
   {
-    "__docId__": 298,
+    "__docId__": 294,
     "kind": "variable",
     "name": "GENESISBS58",
     "memberof": "src/params.js",
@@ -6350,7 +6253,7 @@
     }
   },
   {
-    "__docId__": 299,
+    "__docId__": 295,
     "kind": "variable",
     "name": "GENESISBLOCK",
     "memberof": "src/params.js",
@@ -6370,7 +6273,7 @@
     }
   },
   {
-    "__docId__": 300,
+    "__docId__": 296,
     "kind": "variable",
     "name": "checkpoints",
     "memberof": "src/params.js",
@@ -6390,7 +6293,7 @@
     }
   },
   {
-    "__docId__": 301,
+    "__docId__": 297,
     "kind": "variable",
     "name": "pegged",
     "memberof": "src/params.js",
@@ -6410,7 +6313,7 @@
     "ignore": true
   },
   {
-    "__docId__": 302,
+    "__docId__": 298,
     "kind": "variable",
     "name": "stable",
     "memberof": "src/params.js",
@@ -6431,7 +6334,7 @@
     "ignore": true
   },
   {
-    "__docId__": 303,
+    "__docId__": 299,
     "kind": "variable",
     "name": "exchanges",
     "memberof": "src/params.js",
@@ -6452,7 +6355,7 @@
     "ignore": true
   },
   {
-    "__docId__": 304,
+    "__docId__": 300,
     "kind": "function",
     "name": "getPairValue",
     "memberof": "src/params.js",
@@ -6479,7 +6382,7 @@
     "ignore": true
   },
   {
-    "__docId__": 305,
+    "__docId__": 301,
     "kind": "file",
     "name": "src/shorten.js",
     "content": "export const or = (a, b) => a ? a : b;\n",
@@ -6490,7 +6393,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 306,
+    "__docId__": 302,
     "kind": "function",
     "name": "or",
     "memberof": "src/shorten.js",
@@ -6522,7 +6425,7 @@
     "return": null
   },
   {
-    "__docId__": 307,
+    "__docId__": 303,
     "kind": "file",
     "name": "src/utils/hash-from-multihash.js",
     "content": "import CID from 'cids'\r\n\r\nexport default multihash => {\r\n  const cid = new CID(multihash.replace('/ipfs/', ''))\r\n  return cid.multihash.slice(cid.prefix.length - 3).toString('hex')\r\n}",
@@ -6533,7 +6436,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 308,
+    "__docId__": 304,
     "kind": "function",
     "name": "hashfrommultihash",
     "memberof": "src/utils/hash-from-multihash.js",
@@ -6563,7 +6466,7 @@
     }
   },
   {
-    "__docId__": 309,
+    "__docId__": 305,
     "kind": "file",
     "name": "src/utils.js",
     "content": "import { configPath } from './params';\r\nimport bs58 from 'bs58';\r\nimport chalk from 'chalk';\r\nimport CID from 'cids'\r\nimport { readFile, writeFile } from 'fs'\r\nimport { promisify } from 'util'\r\nconst { encode } = bs58\r\n\r\nconst read = promisify(readFile)\r\nconst write = promisify(writeFile)\r\n\r\nexport const prefixFromBaseEncoded = base => new CID(base).prefix;\r\n\r\nexport const baseEncodedToBuffer = (base) => new CID(base).multihash;\r\n\r\nexport const baseEncodedToHex = (base) => baseEncodedToBuffer(base).toString('hex');\r\n\r\nexport const hashFromMultihash = multihash => {\r\n  let hash = multihash.replace('/ipfs/', '');\r\n  const cid = new CID(hash)\r\n  const prefix = cid.prefix;\r\n  return cid.multihash.slice(prefix.length - 3).toString('hex');\r\n}\r\n\r\nexport const multihashFromHash = hash => {\r\n  const cid = new CID(1, 'leofcoin-block', Buffer.from(`1d40${hash}`, 'hex'), 'base58btc');\r\n  // const hash = multihash.replace('/ipfs/', '');\r\n  // console.log(cid.toBaseEncodedString());\r\n  return cid.toBaseEncodedString();\r\n}\r\n\r\nif (process.platform === 'win32') {\r\n  const readLine = require('readline').createInterface({\r\n    input: process.stdin,\r\n    output: process.stdout\r\n  });\r\n\r\n  readLine.on('SIGINT', () => {\r\n    process.emit('SIGINT');\r\n  });\r\n};\r\n\r\nexport const debug = (text) => {\r\n\tif (process.env.DEBUG || process.argv.indexOf('--verbose') !== -1) {\r\n    const stack = new Error().stack;\r\n    const caller = stack.split('\\n')[2].trim();\r\n    console.groupCollapsed(chalk.blue(text));\r\n    console.log(caller)\r\n    console.groupEnd();\r\n  };\r\n};\r\n\r\nexport const log = text => {\r\n  console.log(chalk.cyan(text));\r\n}\r\n\r\nexport const succes = text => {\r\n  console.log(chalk.green(text));\r\n}\r\n\r\nexport const fail = text => {\r\n  console.log(chalk.red(text));\r\n}\r\n\r\nexport const groupCollapsed = (text, cb) => {\r\n  console.groupCollapsed(chalk.gray.bold(text));\r\n  cb();\r\n  console.groupEnd();\r\n}\r\n/**\r\n * Get hash difficulty\r\n *\r\n * @param hash\r\n * @return {Number}\r\n */\r\nexport const getDifficulty = hash => {\r\n\treturn parseInt(hash.substring(0, 8), 16);\r\n};\r\n\r\nexport const textlog = async text => {\r\n  let content = '';\r\n  try {\r\n    // content = await read('log');\r\n  } catch (e) {\r\n    console.log('creating new log file');\r\n  }\r\n\r\n  content += '\\n';\r\n  content += text;\r\n  return\r\n  // await write('log', content);\r\n};\r\n\r\nexport const timeout = (ms = 1000, cb) => {\r\n\tsetTimeout(() => {\r\n\t\tcb();\r\n\t}, ms);\r\n};\r\n\r\nexport const interval = (cb, ms = 1000) => {\r\n\tsetInterval(() => {\r\n\t\tcb();\r\n\t}, ms);\r\n};\r\n\r\nexport const hashes = nonce => {\r\n\tconst hashrates = [10, 100, 1000, 10000, 100000, 1000000, 1000000000, 1000000000000, 1000000000000000];\r\n\tfor (let i = hashrates.length; i-- > 0;) {\r\n\t\tif (nonce % hashrates[i - 1] === 0) return hashrates[i - 1];\r\n\t}\r\n\treturn hashrates.filter(hashrate => {\r\n\t\tif (nonce % hashrate === 0) return hashrate;\r\n\t});\r\n};\r\n\r\nexport const median = array => {\r\n  array.sort( function(a,b) {return a - b;} );\r\n\r\n  var half = Math.floor(array.length/2);\r\n\r\n  if(array.length % 2)\r\n    return array[half];\r\n  else\r\n    return (array[half-1] + array[half]) / 2.0;\r\n}\r\n\r\nlet previousDate = Date.now();\r\nlet previousMinuteDate = Date.now();\r\nlet hashCount = 0;\r\nlet timeoutRunning = false;\r\nlet rates = []\r\nexport const hashLog = nonce => {\r\n\tif (typeof(hashes(nonce)) === 'number') {\r\n\t\thashCount = hashCount + hashes(nonce);\r\n\t}\r\n  const now = Date.now()\r\n  // if (now - previousMinuteDate >= 60000) {\r\n    // previousMinuteDate = now;\r\n    // const middle = median(rates);\r\n  if (now - previousDate >= 1000) {\r\n    previousDate = now;\r\n    rates[hashCount]\r\n    hashCount = 0;\r\n    return rates;\r\n  }\r\n\r\n\r\n};\r\n\r\nexport const config = {\r\n\tserver: {\r\n\t\tport: 3030,\r\n\t\thost: 'localhost',\r\n\t},\r\n\tp2p: {\r\n\t\tport: 6001,\r\n\t\tpeers: [],\r\n\t},\r\n\treward: 150,\r\n\tpeers: []\r\n};\r\n\r\nconst defaultConfig = async () => {\r\n  // const wallet = generateWallet();\r\n  // TODO: prompt for password\r\n  // bus.on('initial-setup', message => {\r\n    // console.log(message);\r\n  // bus.emit('initial', wallet.mnemonic);\r\n  // })\r\n  // await writeWallet(wallet.save());\r\n  // const account = wallet.derive('m/0\\'/0/0');\r\n\treturn {\r\n  \tminer: {\r\n  \t\t// address: account.address,\r\n  \t\tintensity: 1\r\n  \t}\r\n  }\r\n};\r\n\r\nexport const hexFromMultihash = multihash => {\r\n  return multihash.toString('hex').substring(4);\r\n}\r\n\r\nexport const multihashFromHex = hex => {\r\n  return encode(Buffer.from(`1d40${hex}`, 'hex'));\r\n}\r\n\r\nexport const getUserConfig = async () => {\r\n\tlet config;\r\n  try {\r\n    config = await read(configPath)\r\n    config = JSON.parse(config.toString())\r\n  } catch (e) {\r\n    config = await defaultConfig()\r\n    await write(configPath, JSON.stringify(config))\r\n    debug(`new config file created @${configPath}`);\r\n  }\r\n  return config\r\n}\r\n\r\n/**\r\n * allow retry upto \"amount\" times\r\n * @param {number} amount\r\n */\r\nexport const allowFailureUntillEnough = (func, amount = 5) => new Promise(async (resolve, reject) => {\r\n  if (typeof func !== 'function') reject('function undefined');\r\n  if (typeof amount !== 'number') reject(`Expected amount to be a typeof Number`);\r\n  let count = 0;\r\n  for (var i = 0; i < amount; i++) {\r\n    try {\r\n      await func();\r\n      resolve();\r\n    } catch (error) {\r\n      if (amount === count) reject(error);\r\n    }\r\n  }\r\n});\r\n\r\nexport { read }",
@@ -6574,7 +6477,7 @@
     "lineNumber": 1
   },
   {
-    "__docId__": 310,
+    "__docId__": 306,
     "kind": "variable",
     "name": "encode",
     "memberof": "src/utils.js",
@@ -6595,7 +6498,7 @@
     "ignore": true
   },
   {
-    "__docId__": 311,
+    "__docId__": 307,
     "kind": "variable",
     "name": "write",
     "memberof": "src/utils.js",
@@ -6616,7 +6519,7 @@
     "ignore": true
   },
   {
-    "__docId__": 312,
+    "__docId__": 308,
     "kind": "function",
     "name": "prefixFromBaseEncoded",
     "memberof": "src/utils.js",
@@ -6642,7 +6545,7 @@
     "return": null
   },
   {
-    "__docId__": 313,
+    "__docId__": 309,
     "kind": "function",
     "name": "baseEncodedToBuffer",
     "memberof": "src/utils.js",
@@ -6668,7 +6571,7 @@
     "return": null
   },
   {
-    "__docId__": 314,
+    "__docId__": 310,
     "kind": "function",
     "name": "baseEncodedToHex",
     "memberof": "src/utils.js",
@@ -6694,7 +6597,7 @@
     "return": null
   },
   {
-    "__docId__": 315,
+    "__docId__": 311,
     "kind": "function",
     "name": "hashFromMultihash",
     "memberof": "src/utils.js",
@@ -6724,7 +6627,7 @@
     }
   },
   {
-    "__docId__": 316,
+    "__docId__": 312,
     "kind": "function",
     "name": "multihashFromHash",
     "memberof": "src/utils.js",
@@ -6754,7 +6657,7 @@
     }
   },
   {
-    "__docId__": 317,
+    "__docId__": 313,
     "kind": "function",
     "name": "debug",
     "memberof": "src/utils.js",
@@ -6780,7 +6683,7 @@
     "return": null
   },
   {
-    "__docId__": 318,
+    "__docId__": 314,
     "kind": "function",
     "name": "log",
     "memberof": "src/utils.js",
@@ -6806,7 +6709,7 @@
     "return": null
   },
   {
-    "__docId__": 319,
+    "__docId__": 315,
     "kind": "function",
     "name": "succes",
     "memberof": "src/utils.js",
@@ -6832,7 +6735,7 @@
     "return": null
   },
   {
-    "__docId__": 320,
+    "__docId__": 316,
     "kind": "function",
     "name": "fail",
     "memberof": "src/utils.js",
@@ -6858,7 +6761,7 @@
     "return": null
   },
   {
-    "__docId__": 321,
+    "__docId__": 317,
     "kind": "function",
     "name": "groupCollapsed",
     "memberof": "src/utils.js",
@@ -6890,7 +6793,7 @@
     "return": null
   },
   {
-    "__docId__": 322,
+    "__docId__": 318,
     "kind": "function",
     "name": "getDifficulty",
     "memberof": "src/utils.js",
@@ -6926,7 +6829,7 @@
     }
   },
   {
-    "__docId__": 323,
+    "__docId__": 319,
     "kind": "function",
     "name": "textlog",
     "memberof": "src/utils.js",
@@ -6952,7 +6855,7 @@
     "return": null
   },
   {
-    "__docId__": 324,
+    "__docId__": 320,
     "kind": "function",
     "name": "timeout",
     "memberof": "src/utils.js",
@@ -6987,7 +6890,7 @@
     "return": null
   },
   {
-    "__docId__": 325,
+    "__docId__": 321,
     "kind": "function",
     "name": "interval",
     "memberof": "src/utils.js",
@@ -7022,7 +6925,7 @@
     "return": null
   },
   {
-    "__docId__": 326,
+    "__docId__": 322,
     "kind": "function",
     "name": "hashes",
     "memberof": "src/utils.js",
@@ -7052,7 +6955,7 @@
     }
   },
   {
-    "__docId__": 327,
+    "__docId__": 323,
     "kind": "function",
     "name": "median",
     "memberof": "src/utils.js",
@@ -7082,7 +6985,7 @@
     }
   },
   {
-    "__docId__": 328,
+    "__docId__": 324,
     "kind": "variable",
     "name": "previousDate",
     "memberof": "src/utils.js",
@@ -7103,7 +7006,7 @@
     "ignore": true
   },
   {
-    "__docId__": 329,
+    "__docId__": 325,
     "kind": "variable",
     "name": "previousMinuteDate",
     "memberof": "src/utils.js",
@@ -7124,7 +7027,7 @@
     "ignore": true
   },
   {
-    "__docId__": 330,
+    "__docId__": 326,
     "kind": "variable",
     "name": "hashCount",
     "memberof": "src/utils.js",
@@ -7145,7 +7048,7 @@
     "ignore": true
   },
   {
-    "__docId__": 331,
+    "__docId__": 327,
     "kind": "variable",
     "name": "timeoutRunning",
     "memberof": "src/utils.js",
@@ -7166,7 +7069,7 @@
     "ignore": true
   },
   {
-    "__docId__": 332,
+    "__docId__": 328,
     "kind": "variable",
     "name": "rates",
     "memberof": "src/utils.js",
@@ -7187,7 +7090,7 @@
     "ignore": true
   },
   {
-    "__docId__": 333,
+    "__docId__": 329,
     "kind": "function",
     "name": "hashLog",
     "memberof": "src/utils.js",
@@ -7217,7 +7120,7 @@
     }
   },
   {
-    "__docId__": 334,
+    "__docId__": 330,
     "kind": "variable",
     "name": "config",
     "memberof": "src/utils.js",
@@ -7237,7 +7140,7 @@
     }
   },
   {
-    "__docId__": 335,
+    "__docId__": 331,
     "kind": "function",
     "name": "defaultConfig",
     "memberof": "src/utils.js",
@@ -7261,7 +7164,7 @@
     "ignore": true
   },
   {
-    "__docId__": 336,
+    "__docId__": 332,
     "kind": "function",
     "name": "hexFromMultihash",
     "memberof": "src/utils.js",
@@ -7291,7 +7194,7 @@
     }
   },
   {
-    "__docId__": 337,
+    "__docId__": 333,
     "kind": "function",
     "name": "multihashFromHex",
     "memberof": "src/utils.js",
@@ -7321,7 +7224,7 @@
     }
   },
   {
-    "__docId__": 338,
+    "__docId__": 334,
     "kind": "function",
     "name": "getUserConfig",
     "memberof": "src/utils.js",
@@ -7344,7 +7247,7 @@
     }
   },
   {
-    "__docId__": 339,
+    "__docId__": 335,
     "kind": "function",
     "name": "allowFailureUntillEnough",
     "memberof": "src/utils.js",
@@ -7373,7 +7276,7 @@
     "return": null
   },
   {
-    "__docId__": 340,
+    "__docId__": 336,
     "kind": "variable",
     "name": "read",
     "memberof": "src/utils.js",
@@ -7394,7 +7297,7 @@
   },
   {
     "kind": "index",
-    "content": "",
+    "content": "# core\n\n[![standard-readme compliant](https://img.shields.io/badge/standard--readme-OK-green.svg?style=flat-square)](https://github.com/RichardLitt/standard-readme)\nTODO: Put more badges here.\n\nLeofcoin core (daemon, api and apiServer)\n\nTODO: Fill out this long description.\n\n## Table of Contents\n\n- [Install](#install)\n- [Usage](#usage)\n- [Maintainers](#maintainers)\n- [Contributing](#contributing)\n- [License](#license)\n\n## Install\n\n### module\n```sh\nnpm i --save @leafocin/core\n```\n\n### cli\n```sh\nnpm i -g --save @leafocin/core\n```\n\n## Usage\n\n### module\n```js\nimport { core, api } from '@leofcoin/core'\n```\n\n### cli\n```sh\nleofcoin help\n```\n\n## Maintainers\n\n[@vandeurenglenn](https://github.com/vandeurenglenn)\n\n## Contributing\n\nPRs accepted.\n\nSmall note: If editing the README, please conform to the [standard-readme](https://github.com/RichardLitt/standard-readme) specification.\n\n## License\n\nMIT © 2020 Vandeuren Glenn\n",
     "longname": "D:\\Workspace-laptop\\leofcoin\\core\\README.md",
     "name": "./README.md",
     "static": true,
@@ -7402,7 +7305,7 @@
   },
   {
     "kind": "packageJSON",
-    "content": "{\r\n  \"name\": \"@leofcoin/core\",\r\n  \"version\": \"0.5.2\",\r\n  \"description\": \"\",\r\n  \"main\": \"index.js\",\r\n  \"scripts\": {\r\n    \"c\": \"rollup -c\",\r\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\",\r\n    \"doc\": \"./node_modules/.bin/esdoc\"\r\n  },\r\n  \"bin\": {\r\n    \"leofcoin\": \"bin/cli.js\"\r\n  },\r\n  \"repository\": {\r\n    \"type\": \"git\",\r\n    \"url\": \"git+https://github.com/leofcoin/core.git\"\r\n  },\r\n  \"keywords\": [],\r\n  \"author\": \"\",\r\n  \"license\": \"MIT\",\r\n  \"bugs\": {\r\n    \"url\": \"https://github.com/leofcoin/core/issues\"\r\n  },\r\n  \"homepage\": \"https://github.com/leofcoin/core#readme\",\r\n  \"esdoc\": {\r\n    \"source\": \"./src\",\r\n    \"destination\": \"./docs\",\r\n    \"plugins\": [\r\n      {\r\n        \"name\": \"esdoc-ecmascript-proposal-plugin\",\r\n        \"option\": {\r\n          \"classProperties\": true,\r\n          \"objectRestSpread\": true,\r\n          \"doExpressions\": true,\r\n          \"functionBind\": true,\r\n          \"functionSent\": true,\r\n          \"asyncGenerators\": true,\r\n          \"decorators\": true,\r\n          \"exportExtensions\": true,\r\n          \"dynamicImport\": true\r\n        }\r\n      }\r\n    ]\r\n  },\r\n  \"dependencies\": {\r\n    \"@hapi/joi\": \"^17.1.1\",\r\n    \"@koa/router\": \"^8.0.8\",\r\n    \"coin-ticker\": \"^3.2.0\",\r\n    \"koa\": \"^2.12.0\",\r\n    \"lfc-api\": \"^2.12.23\",\r\n    \"multi-signature\": \"^1.1.0\",\r\n    \"multi-wallet\": \"^1.2.6\",\r\n    \"randombytes\": \"^2.1.0\"\r\n  },\r\n  \"devDependencies\": {\r\n    \"esdoc\": \"^1.1.0\",\r\n    \"esdoc-ecmascript-proposal-plugin\": \"^1.0.0\",\r\n    \"esdoc-standard-plugin\": \"^1.0.0\",\r\n    \"rollup\": \"^2.10.4\",\r\n    \"rollup-plugin-json\": \"^4.0.0\",\r\n    \"rollup-plugin-modify\": \"^3.0.0\"\r\n  }\r\n}\r\n",
+    "content": "{\r\n  \"name\": \"@leofcoin/core\",\r\n  \"version\": \"0.5.3\",\r\n  \"description\": \"\",\r\n  \"main\": \"index.js\",\r\n  \"scripts\": {\r\n    \"c\": \"rollup -c\",\r\n    \"test\": \"echo \\\"Error: no test specified\\\" && exit 1\",\r\n    \"doc\": \"./node_modules/.bin/esdoc\"\r\n  },\r\n  \"bin\": {\r\n    \"leofcoin\": \"bin/cli.js\"\r\n  },\r\n  \"repository\": {\r\n    \"type\": \"git\",\r\n    \"url\": \"git+https://github.com/leofcoin/core.git\"\r\n  },\r\n  \"keywords\": [],\r\n  \"author\": \"\",\r\n  \"license\": \"MIT\",\r\n  \"bugs\": {\r\n    \"url\": \"https://github.com/leofcoin/core/issues\"\r\n  },\r\n  \"homepage\": \"https://github.com/leofcoin/core#readme\",\r\n  \"esdoc\": {\r\n    \"source\": \"./src\",\r\n    \"destination\": \"./docs\",\r\n    \"plugins\": [\r\n      {\r\n        \"name\": \"esdoc-ecmascript-proposal-plugin\",\r\n        \"option\": {\r\n          \"classProperties\": true,\r\n          \"objectRestSpread\": true,\r\n          \"doExpressions\": true,\r\n          \"functionBind\": true,\r\n          \"functionSent\": true,\r\n          \"asyncGenerators\": true,\r\n          \"decorators\": true,\r\n          \"exportExtensions\": true,\r\n          \"dynamicImport\": true\r\n        }\r\n      }\r\n    ]\r\n  },\r\n  \"dependencies\": {\r\n    \"@hapi/joi\": \"^17.1.1\",\r\n    \"@koa/router\": \"^8.0.8\",\r\n    \"coin-ticker\": \"^3.2.0\",\r\n    \"koa\": \"^2.12.0\",\r\n    \"lfc-api\": \"^2.12.23\",\r\n    \"multi-signature\": \"^1.1.0\",\r\n    \"multi-wallet\": \"^1.2.6\",\r\n    \"randombytes\": \"^2.1.0\"\r\n  },\r\n  \"devDependencies\": {\r\n    \"esdoc\": \"^1.1.0\",\r\n    \"esdoc-ecmascript-proposal-plugin\": \"^1.0.0\",\r\n    \"esdoc-standard-plugin\": \"^1.0.0\",\r\n    \"rollup\": \"^2.10.5\",\r\n    \"rollup-plugin-json\": \"^4.0.0\",\r\n    \"rollup-plugin-modify\": \"^3.0.0\"\r\n  }\r\n}\r\n",
     "longname": "D:\\Workspace-laptop\\leofcoin\\core\\package.json",
     "name": "package.json",
     "static": true,

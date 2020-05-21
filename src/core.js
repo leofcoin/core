@@ -1,7 +1,8 @@
-import { getUserConfig, debug, allowFailureUntillEnough, log, groupCollapsed } from './utils';
+
+import LfcApi from 'lfc-api';
+import { debug, log, groupCollapsed } from './utils';
 import bus from './lib/bus';
 import GlobalScope from './global-scope';
-import LfcApi from 'lfc-api';
 import { join } from 'path';
 import { configPath, networkPath, network, genesis } from './params';
 // import ipfsdNode from './../../ipfsd-node/src/node';
@@ -17,18 +18,16 @@ import apiServer from './api-server'
 globalThis.bus = globalThis.bus || bus
 globalThis.peerMap = globalThis.peerMap || new Map()
 
-const exec = platform() === 'win32' ? './ipfs.exe' : './ipfs';
 export {_api as api}
 export const core = async (config = {}) => {
   if (config.debug) process.env.DEBUG = true
 	try {
-    apiServer()
     const now = Date.now();
-    const config = await getUserConfig();
     bus.emit('stage-one');
     
     debug('starting ipfs');
     const api = await new LfcApi({ init: true, start: true, bootstrap: 'lfc', forceJS: true, star: config.star})
+    apiServer()
     try {
       await new GlobalScope(api)
     } catch (e) {
@@ -72,7 +71,7 @@ export const core = async (config = {}) => {
       log(`peer connection took: ${(connection_now - ipfsd_now) / 1000} seconds`);
       log(`total load prep took ${(Date.now() - now) / 1000} seconds`);
     })
-    await write(configPath, JSON.stringify(config, null, '\t'));
+    // await write(configPath, JSON.stringify(config, null, '\t'));
     const chain = new DAGChain({ genesis, network, ipfs: api.ipfs });
     await chain.init(genesis);
     return chain;
