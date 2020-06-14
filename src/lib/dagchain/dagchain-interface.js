@@ -136,20 +136,20 @@ export const difficulty = () => {
 		}
 	}
 	if (stamps.length === 0) {
-		stamps.push(30);
+		stamps.push(10);
 	}
-	let blocksMedian = median(stamps) || 30;
-  const offset = blocksMedian / 30
+	let blocksMedian = median(stamps) || 10;
+  const offset = blocksMedian / 10
    // offset for quick recovery
-	if (blocksMedian < 30) {
+	if (blocksMedian < 10) {
 		blocksMedian -= (offset / 2);
-	} else if (blocksMedian > 30) {
+	} else if (blocksMedian > 10) {
 		blocksMedian += (offset * 2);
 	}
   if (blocksMedian < 0) blocksMedian = -blocksMedian
   console.log(`Average Block Time: ${blocksMedian}`);
-  console.log(`Difficulty: ${30 / blocksMedian}`);
-	return ((100000 / ((30 / blocksMedian) * 100)) * 3); // should result in a block every 10 seconds
+  console.log(`Difficulty: ${10 / blocksMedian}`);
+	return (10000000 / ((10 / blocksMedian) * 1000)); // should result in a block every 10 seconds
 };//10000
 
 export const transformBlock = ({multihash, data}) => {

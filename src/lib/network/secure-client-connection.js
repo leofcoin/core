@@ -1,7 +1,6 @@
 import io from 'socket.io-client';
 import EventEmitter from 'events';
 import ecdh from 'crypto-ecdh';
-import { exists, write } from 'crypto-io-fs';
 import { seed, netKeyPath } from './../../params';
 // TODO: hardcoded swarm key?
 // TODO: replace with websocket
@@ -56,11 +55,11 @@ class SecureClientConnection extends EventEmitter {
 
     this.socket.on('network', async cipher => {
       const address = await this.pair.decrypt(cipher);
-      if (!exists(netKeyPath)) {
-        cipher = await this.requestKey();
-        const key = await this.pair.decrypt(cipher);
-        await write(netKeyPath, key);
-      }
+      // if (!exists(netKeyPath)) {
+      //   cipher = await this.requestKey();
+      //   const key = await this.pair.decrypt(cipher);
+      //   // await write(netKeyPath, key);
+      // }
       this.emit('connected', {address});
     });
     this.socket.on('address', data => console.log(data));

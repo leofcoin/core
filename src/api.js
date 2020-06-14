@@ -1,4 +1,3 @@
-import { read, write } from 'crypto-io-fs';
 import { APPDATAPATH, network, configPath } from './params';
 import { join } from 'path';
 import { buildTransaction } from './lib/transaction';

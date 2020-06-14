@@ -6,7 +6,6 @@ import GlobalScope from './global-scope';
 import { join } from 'path';
 import { configPath, networkPath, network, genesis } from './params';
 // import ipfsdNode from './../../ipfsd-node/src/node';
-import { write } from 'crypto-io-fs';
 // import ipfsStar from './lib/network/ipfs-star';
 // import { connect, connectBootstrap } from './lib/network/peernet';
 import { DAGChain } from './lib/dagchain/dagchain.js';

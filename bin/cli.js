@@ -25,6 +25,8 @@ const args = process.argv.slice(2, process.argv.length);
       if (!response) core({network: 'leofcoin'})
       const value = args[args.indexOf('--intensity') + 1]
       await fetch('http://localhost:5050/api/config/miner?intensity=' + value, {method: 'put'})
+    } else if (action === 'wallet') {
+      
     }
   }
 
