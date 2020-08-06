@@ -1,5 +1,7 @@
-import calculateHash from './../dagchain/calculate-hash';
+import Hash from './../../../node_modules/@leofcoin/lib/src/hash';
 import getDifficulty from '../../difficulty';
+
+const hash = new Hash()
 
 const hashes = nonce => {
 	const hashrates = [10000];
@@ -15,10 +17,14 @@ export default (() => {
 	process.on('message', async ({block, difficulty}) => {
   	const stop = () => resolve(null);
   	let hashCount = 0;
-		block.hash = await calculateHash(block);
-  	while (getDifficulty(block.hash) >= difficulty) {
-  		block.nonce = Math.floor(Math.random() * 1000000001)
-  		block.hash = await calculateHash(block);
+		// TODO: A block it's hash should be a multihash
+		// and converted to normal hash whenever dev needs
+		block.hash = await hash.blockHash(block);
+		let hexHash = await hash.hashFromMultihash(block.hash)
+  	while (getDifficulty(hexHash) >= difficulty) {
+  		block.nonce += 1
+  		block.hash = await hash.blockHash(block);
+			hexHash = await hash.hashFromMultihash(block.hash)
   		hashCount = hashCount + Number(hashes(block.nonce));
   	}
   	process.send({ block, hashCount });

@@ -39,6 +39,6 @@ const schemas = {
 export const validate = (schema, data) =>  schemas[schema].validate(data);
 
 export const isValid = (schema, data) => {
-	console.log(validate(schema, data).error);
+	console.log(validate(schema, data));
 	return Boolean(!validate(schema, data).error)
 };

@@ -1,7 +1,6 @@
 import { configPath } from './params';
 import bs58 from 'bs58';
 import chalk from 'chalk';
-import CID from 'cids'
 import { readFile, writeFile } from 'fs'
 import { promisify } from 'util'
 const { encode } = bs58
@@ -9,25 +8,6 @@ const { encode } = bs58
 const read = promisify(readFile)
 const write = promisify(writeFile)
 
-export const prefixFromBaseEncoded = base => new CID(base).prefix;
-
-export const baseEncodedToBuffer = (base) => new CID(base).multihash;
-
-export const baseEncodedToHex = (base) => baseEncodedToBuffer(base).toString('hex');
-
-export const hashFromMultihash = multihash => {
-  let hash = multihash.replace('/ipfs/', '');
-  const cid = new CID(hash)
-  const prefix = cid.prefix;
-  return cid.multihash.slice(prefix.length - 3).toString('hex');
-}
-
-export const multihashFromHash = hash => {
-  const cid = new CID(1, 'leofcoin-block', Buffer.from(`1d40${hash}`, 'hex'), 'base58btc');
-  // const hash = multihash.replace('/ipfs/', '');
-  // console.log(cid.toBaseEncodedString());
-  return cid.toBaseEncodedString();
-}
 
 if (process.platform === 'win32') {
   const readLine = require('readline').createInterface({
@@ -67,15 +47,6 @@ export const groupCollapsed = (text, cb) => {
   cb();
   console.groupEnd();
 }
-/**
- * Get hash difficulty
- *
- * @param hash
- * @return {Number}
- */
-export const getDifficulty = hash => {
-	return parseInt(hash.substring(0, 8), 16);
-};
 
 export const textlog = async text => {
   let content = '';
@@ -112,17 +83,6 @@ export const hashes = nonce => {
 		if (nonce % hashrate === 0) return hashrate;
 	});
 };
-
-export const median = array => {
-  array.sort( function(a,b) {return a - b;} );
-
-  var half = Math.floor(array.length/2);
-
-  if(array.length % 2)
-    return array[half];
-  else
-    return (array[half-1] + array[half]) / 2.0;
-}
 
 let previousDate = Date.now();
 let previousMinuteDate = Date.now();
@@ -176,14 +136,6 @@ const defaultConfig = async () => {
   	}
   }
 };
-
-export const hexFromMultihash = multihash => {
-  return multihash.toString('hex').substring(4);
-}
-
-export const multihashFromHex = hex => {
-  return encode(Buffer.from(`1d40${hex}`, 'hex'));
-}
 
 export const getUserConfig = async () => {
 	let config;

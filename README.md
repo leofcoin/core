@@ -5,7 +5,10 @@ TODO: Put more badges here.
 
 Leofcoin core (daemon, api and apiServer)
 
-TODO: Fill out this long description.
+- 30 sec block times
+- 30 sec timeout for miners (to give others a chance)
+
+* note: blocktime/timeout could change in the future
 
 ## Table of Contents
 

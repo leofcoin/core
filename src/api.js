@@ -1,13 +1,12 @@
-import { APPDATAPATH, network, configPath } from './params';
 import { join } from 'path';
-import { buildTransaction } from './lib/transaction';
-import { mempool, getBalanceForAddress, getBalanceForAddressAfter } from './lib/dagchain/dagchain-interface';
-import { discoverAccounts } from './lib/wallet-utils';
-import { or } from './shorten';
-import bus from './lib/bus';
-import Miner from './lib/miner';
+import Chain from './../node_modules/@leofcoin/lib/src/chain.js';
+import { discoverAccounts } from './lib/wallet-utils.js';
+import { or } from './shorten.js';
+import bus from './lib/bus.js';
+import Miner from './lib/miner.js';
 // TODO: multiwallet in browser
 const miners = [];
+const chain = new Chain()
 
 globalThis.bus = globalThis.bus || bus
 
@@ -42,35 +41,23 @@ export const setMinerConfig = async minerConfig => {
   return;
 }
 
-/**
- *
- * @param {string|number} height hash or height
- */
-export const block = async (height) => {
-  await state('ready', true)
-  if (!height) return chain[chain.length - 1];
-  if (typeof height !== 'string') return chain[height]
-  return chain[blockHashSet[height]];
-};
-
 export const blocks = async (number, last) => {
   await state('ready', true)
-  console.log(number, last);
-  if (!number) return leofcoin.chain.get();
+  if (!number) return globalThis.chain
   else if (last) {
-    return chain.slice((chain.length - number), chain.length);
-  } else return block(number);
+    return globalThis.chain.slice((globalThis.chain.length - number), globalThis.chain.length);
+  } else return globalThis.chain[number];
 };
 
 export const transactions = async (number, last) => {
   await state('ready', true)
-  if (!number) return chain[chain.length - 1].transactions.map(tx => {
-    tx.parentHash = chain[chain.length - 1].hash
+  if (!number) return globalThis.chain[globalThis.chain.length - 1].transactions.map(tx => {
+    tx.parentHash = globalThis.chain[globalThis.chain.length - 1].hash
     return tx;
   });
   let blocks;
-  if (last) blocks = chain.slice((chain.length - number), chain.length);
-  else blocks = chain.slice(0, number + 1);
+  if (last) blocks = globalThis.chain.slice((globalThis.chain.length - number), globalThis.chain.length);
+  else blocks = globalThis.chain.slice(0, number + 1);
 
   const tx = blocks.reduce((p, c) => [...p, ...c.transactions.map(tx => {
     tx.parentHash = c.hash;
@@ -147,7 +134,9 @@ const accounts = async (discoverDepth = 0) => {
   let accounts = undefined;
   try {
     wallet = leofcoin.wallet;
-    await state('ready', true);
+    console.log('state');
+    // await state('ready', true);
+    console.log('state');
     accounts = discoverAccounts(wallet, discoverDepth);
   } catch (e) {
     console.log('readied');
@@ -155,7 +144,10 @@ const accounts = async (discoverDepth = 0) => {
   return accounts;
 }
 
-export const accountNames = async () => await walletStore.get('accounts')
+export const accountNames = async () => {
+  let accounts = await walletStore.get('accounts')
+  return accounts.map(acc => acc[0])
+}
 // TODO: whenever a address is used update depth...
 // IOW
 // external(0).addr => internal(0).addr => external(1).addr => internal(1).addr ...
@@ -172,8 +164,12 @@ const _addresses = ([account], depth = 0) => {
 }
 
 const addresses = async () => {
+  console.log('add');
+  await state('ready', true)
   let call = 0;
+  console.log('addresses');
   let _accounts = await accounts();
+  console.log(_accounts);
   const names = await accountNames();
   // TODO: allow account by name (even when there aren't any transactions...)
   // if (_accounts && _accounts.length < names.length) _account = [..._accounts, ...await accounts(names.length)]
@@ -216,14 +212,17 @@ export const send = async ({from, to, amount, message}, response) => {
     const names = await accountNames();
     // TODO: cleanup wallet internal/external...
     // something like accounts: [{ name, internal: [internal(0), internal(1), ...]}]
-    value = await buildTransaction(_accounts[names.indexOf(from[1])][0].external(0), to, parseInt(amount))
-
-    const tx = await leofcoin.transaction.get(value.multihash)
-    
+    wallet = _accounts[names.indexOf(from[1])][0].external(0)
+    value = await chain.buildTransaction(wallet, to, parseInt(amount), await chain.getUnspentForAddress(wallet.address))
+    value = await leofcoin.api.transaction.dag.put(value)
+    console.log({value});
+    const tx = await leofcoin.api.transaction.get(value.multihash)
+    // const cid = await util.cid(tx.serialize())
+    // { multihash: cid.toBaseEncodedString(), size: tx.size};
     globalThis.ipfs.pubsub.publish('announce-transaction', JSON.stringify(value))
-    tx.hash = value.multihash
+    
+    tx.hash = hashFromMultihash(value.multihash)
     value = tx
-
   } catch (e) {
     throw e;
   }
@@ -231,12 +230,14 @@ export const send = async ({from, to, amount, message}, response) => {
   return value;
 }
 
-export const balance = getBalanceForAddress;
+const getBalanceForAddress = chain.getBalanceForAddress.bind(chain);
 
-export const balanceAfter = getBalanceForAddressAfter;
+const getBalanceForAddressAfter = chain.getBalanceForAddressAfter.bind(chain);
+
+const lastBlock = chain.lastBlock.bind(chain);
 
 const on = (ev, cb) => bus.on(ev, cb);
 
 const emit = (ev, data) => bus.emit(ev, data);
 
-export {network, on, emit, addresses, getMinerConfig, accounts}
+export { on, emit, addresses, getMinerConfig, accounts, getBalanceForAddress, getBalanceForAddressAfter, lastBlock }

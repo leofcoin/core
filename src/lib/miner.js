@@ -1,10 +1,9 @@
-import { config, hashLog, median } from './../utils';
-import getDifficulty from '../difficulty';
-import { BlockError, TransactionError, MinerWarning } from './errors';
-import { nextBlock, difficulty } from './dagchain/dagchain-interface';
-import bus from './bus';
+import Chain from './../../node_modules/@leofcoin/lib/src/chain';
+import errors from './../../node_modules/@leofcoin/lib/src/errors'
 import { fork } from 'child_process';
 import { join } from 'path';
+
+const chain = new Chain()
 
 export default class Miner {
 
@@ -24,7 +23,7 @@ export default class Miner {
     // TODO: limit intensity when pool is empty
     this.workerPath = join(__dirname, 'miner-worker.js')
     if (!address) {
-      MinerWarning('All profit will be donated until address is set');
+      chain.MinerWarning('All profit will be donated until address is set');
     }
     this.address = address;
     this.running = 0;
@@ -42,27 +41,31 @@ export default class Miner {
     return new Promise((resolve, reject) => {
       this._onBlockAdded = block => {
         this.mineStop()
-        bus.removeListener('block-added', this._onBlockAdded);
-        bus.removeListener('invalid-block', this._onBlockInvalid);
+        globalThis.pubsub.unsubscribe('block-added', this._onBlockAdded);
+        globalThis.pubsub.unsubscribe('invalid-block', this._onBlockInvalid);
         resolve(block);
       }
       this._onBlockInvalid = block => {
         this.mineStop()
-        bus.removeListener('block-added', this._onBlockAdded);
-        bus.removeListener('invalid-block', this._onBlockInvalid);
+        globalThis.pubsub.unsubscribe('block-added', this._onBlockAdded);
+        globalThis.pubsub.unsubscribe('invalid-block', this._onBlockInvalid);
         resolve(null);
       }
-      bus.once('block-added', this._onBlockAdded);
-      bus.once('invalid-block', this._onBlockInvalid);
+      globalThis.pubsub.subscribe('block-added', this._onBlockAdded);
+      globalThis.pubsub.subscribe('invalid-block', this._onBlockInvalid);
     });
   }
 
 
   async start() {
     // ipfs.pubsub.subscribe('invalid-block');
-    this.mining = true;
-    if (!this.job) this.job = Math.random().toString(36).slice(-11);
-    this.mine(this.job);
+    try {
+      this.mining = true;
+      if (!this.job) this.job = Math.random().toString(36).slice(-11);
+      await this.mine(this.job);
+    } catch (e) {
+      console.error(e)
+    }
   }
 
   stop() {
@@ -73,13 +76,13 @@ export default class Miner {
   async mine(job, lastValidBlock) {
     const address = this.address || this.donationAddress;
     const start = Date.now();
-    const {block, hashes, index} = await this.mineBlock(difficulty(), address, job);
+    const {block, hashes, index} = await this.mineBlock(chain.difficulty(), address, job);
 
     if (hashes) {
       const now = Date.now();
       const seconds = (now - start) / 1000;
       const rate = (hashes / seconds) / 1000;
-      bus.emit('miner.hashrate', {uid: job, hashrate: (Math.round(rate * 100) / 100)});
+      globalThis.pubsub.publish('miner.hashrate', {uid: job, hashrate: (Math.round(rate * 100) / 100)});
     }
 
     if (block) {
@@ -106,7 +109,7 @@ export default class Miner {
    * @return {*}
    */
   async mineBlock(difficulty, address, job) {
-    const block = await nextBlock(address);
+    const block = await chain.nextBlock(address);
     console.log(`${job}::Started mining block ${block.index}`);
 
     return this.findBlockHash(block, difficulty);
@@ -142,12 +145,12 @@ export default class Miner {
       }
       const mineStopListener = b => this.mineStop
       const removeListeners = () => {
-       bus.removeListener('block-added', blockAddedListener)
-       bus.removeListener('mine-stop', mineStopListener)
+       globalThis.pubsub.unsubscribe('block-added', blockAddedListener)
+       globalThis.pubsub.unsubscribe('mine-stop', mineStopListener)
       }
       // If other process found the same block faster, kill current one
-      bus.once('block-added', blockAddedListener)
-      bus.once('mine-stop', mineStopListener)
+      globalThis.pubsub.subscribe('block-added', blockAddedListener)
+      globalThis.pubsub.subscribe('mine-stop', mineStopListener)
       // const result = await minerWorker({block, difficulty})
       worker.on('message', (data) => {
         removeListeners();

@@ -2,7 +2,6 @@ import { join } from 'path';
 import { homedir } from 'os';
 import * as bs58 from 'bs58';
 import coinTicker from 'coin-ticker';
-import {median} from './utils';
 import {hour} from './ms'
 const { decode, encode } = bs58
 const argv = process.argv;
@@ -18,12 +17,6 @@ export const network = (() => {
 })()
 
 export const fixIndex = argv.indexOf('fixIndex') !== -1 ? true : false;
-
-export const genesis = (() => {
-	if (argv.indexOf('genesis') !== -1) return true;
-	if (argv.indexOf('init') !== -1) return true;
-  return false;
-})()
 
 export const verbose = argv.indexOf('--verbose') !==  -1
 
@@ -108,55 +101,55 @@ export const GENESISBLOCK = {
 
 export const checkpoints = [
 ];
-/**
- * stablecoin support
- *
- * set to true for a pegged coin
- */
-const pegged = true
-const stable = {}
-const exchanges = coinTicker()
-globalThis.priceMap = new Map();
-const getPairValue = async (pairs) => {
-	const value = {}
-		const prices = {}
-	for (const exchange of exchanges) {
-		try {
-			for (const pair of pairs) {
-				const result = await coinTicker(exchange, pair);
-				prices[pair] = []
-				if (result && result.last) {
-				  prices[pair].push(1 / Number(result.last))
-				} else {
-					exchanges.splice(exchanges.indexOf(exchange))
-				}	
-			}
-			
-			
-		} catch (e) {
-		 exchanges.splice(exchanges.indexOf(exchange))
-		}
-		// stable.pairs.set('BTC', getValueFor('BTC'))
-	}
-	
-	for (const key of Object.keys(prices)) {
-		priceMap.set(key, median(prices[key]))
-	}
-	console.log(priceMap.entries());
-	// const name = 
-}
-
-if (pegged) {
-	stable.currency = 'EUR';
-	stable.value = 1;	
-	stable.pairs  = new Map();
-	(async () => await getPairValue(['BTC_EUR', 'LTC_EUR', 'ETH_EUR']))();
-	setInterval(async () => {
-		const values = await getPairValue(['BTC_EUR', 'LTC_EUR', 'ETH_EUR'])
-		// stable.pairs.set('BTC', getValueFor('BTC'))
-	}, hour(1));
-}
-
+// /**
+//  * stablecoin support
+//  *
+//  * set to true for a pegged coin
+//  */
+// const pegged = true
+// const stable = {}
+// const exchanges = coinTicker()
+// globalThis.priceMap = new Map();
+// const getPairValue = async (pairs) => {
+// 	const value = {}
+// 		const prices = {}
+// 	for (const exchange of exchanges) {
+// 		try {
+// 			for (const pair of pairs) {
+// 				const result = await coinTicker(exchange, pair);
+// 				prices[pair] = []
+// 				if (result && result.last) {
+// 				  prices[pair].push(1 / Number(result.last))
+// 				} else {
+// 					exchanges.splice(exchanges.indexOf(exchange))
+// 				}	
+// 			}
+// 
+// 
+// 		} catch (e) {
+// 		 exchanges.splice(exchanges.indexOf(exchange))
+// 		}
+// 		// stable.pairs.set('BTC', getValueFor('BTC'))
+// 	}
+// 
+// 	for (const key of Object.keys(prices)) {
+// 		priceMap.set(key, median(prices[key]))
+// 	}
+// 	console.log(priceMap.entries());
+// 	// const name = 
+// }
+// 
+// if (pegged) {
+// 	stable.currency = 'EUR';
+// 	stable.value = 1;	
+// 	stable.pairs  = new Map();
+// 	(async () => await getPairValue(['BTC_EUR', 'LTC_EUR', 'ETH_EUR']))();
+// 	setInterval(async () => {
+// 		const values = await getPairValue(['BTC_EUR', 'LTC_EUR', 'ETH_EUR'])
+// 		// stable.pairs.set('BTC', getValueFor('BTC'))
+// 	}, hour(1));
+// }
+// 
 
 
 

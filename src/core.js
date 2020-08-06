@@ -1,10 +1,10 @@
-
+import Pubsub from '@vandeurenglenn/little-pubsub'
 import LfcApi from 'lfc-api';
 import { debug, log, groupCollapsed } from './utils';
 import bus from './lib/bus';
 import GlobalScope from './global-scope';
 import { join } from 'path';
-import { configPath, networkPath, network, genesis } from './params';
+import { configPath, networkPath, network } from './params';
 // import ipfsdNode from './../../ipfsd-node/src/node';
 // import ipfsStar from './lib/network/ipfs-star';
 // import { connect, connectBootstrap } from './lib/network/peernet';
@@ -13,12 +13,13 @@ import { DAGChain } from './lib/dagchain/dagchain.js';
 // import DiscoRoom from '@leofcoin/disco-room';
 import { platform } from 'os';
 import * as _api from './api'
-import apiServer from './api-server'
+import http from './http/http'
+
 globalThis.bus = globalThis.bus || bus
 globalThis.peerMap = globalThis.peerMap || new Map()
 
 export {_api as api}
-export const core = async (config = {}) => {
+export const core = async (config = {}, genesis = false) => {
   if (config.debug) process.env.DEBUG = true
 	try {
     const now = Date.now();
@@ -26,7 +27,11 @@ export const core = async (config = {}) => {
     
     debug('starting ipfs');
     const api = await new LfcApi({ init: true, start: true, bootstrap: 'lfc', forceJS: true, star: config.star, network: config.network})
-    apiServer()
+    // apiServer()
+    
+    globalThis.pubsub = new Pubsub()
+    http()
+     // if (!globalThis) 
     try {
       await new GlobalScope(api)
     } catch (e) {
@@ -45,9 +50,9 @@ export const core = async (config = {}) => {
     process.on('exit', async () => {
       console.log('exit');
         try {
-          await ipfs.pubsub.unsubscribe('block-added');
-          await ipfs.pubsub.unsubscribe('announce-transaction');
-          await ipfs.pubsub.unsubscribe('invalid-transaction');
+          await globalThis.ipfs.pubsub.unsubscribe('block-added');
+          await globalThis.ipfs.pubsub.unsubscribe('announce-transaction');
+          await globalThis.ipfs.pubsub.unsubscribe('invalid-transaction');
         } catch (e) {
           console.log(e);
         }
@@ -71,7 +76,7 @@ export const core = async (config = {}) => {
       log(`total load prep took ${(Date.now() - now) / 1000} seconds`);
     })
     // await write(configPath, JSON.stringify(config, null, '\t'));
-    const chain = new DAGChain({ genesis, network, ipfs: api.ipfs });
+    const chain = new DAGChain({ genesis, network });
     await chain.init(genesis);
     return chain;
 	} catch (e) {
@@ -81,6 +86,7 @@ export const core = async (config = {}) => {
       // return core({ genesis, network });
     }
 		console.error(`load-error::${e}`);
+    console.error(e.stack);
     // process.exit()
 	}
 }

@@ -25,7 +25,7 @@ export const _discoverAccounts = async (account, depth = 0) => {
 				let outputs
 				
 				if (multihash) {
-					transaction = await leofcoin.transaction.get(multihash)
+					transaction = await leofcoin.api.transaction.get(multihash)
 				}
 				if (tx[internal.address] || tx[external.address]) return;
 				if (transaction.inputs) transaction.inputs.forEach((i) => {

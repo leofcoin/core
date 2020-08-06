@@ -44,18 +44,31 @@
   },
   "dependencies": {
     "@hapi/joi": "^17.1.1",
-    "@koa/router": "^8.0.8",
+    "@koa/cors": "^3.1.0",
+    "@koa/router": "^9.3.1",
+    "@leofcoin/lib": "^0.4.4",
+    "@vandeurenglenn/little-pubsub": "^1.2.3",
     "coin-ticker": "^3.2.0",
-    "koa": "^2.12.0",
-    "lfc-api": "^2.14.2",
+    "ipld-lfc": "^0.3.3",
+    "ipld-lfc-tx": "^0.4.1",
+    "ishex": "^2.1.0",
+    "koa": "^2.13.0",
+    "koa-bodyparser": "^4.3.0",
+    "lfc-api": "^2.18.2",
+    "libp2p-crypto": "^0.17.7",
     "multi-signature": "^1.1.0",
-    "randombytes": "^2.1.0"
+    "peer-id": "^0.13.13",
+    "randombytes": "^2.1.0",
+    "socket-request-client": "^1.4.4",
+    "socket-request-server": "^1.0.1"
   },
   "devDependencies": {
+    "@rollup/plugin-commonjs": "^14.0.0",
+    "@rollup/plugin-node-resolve": "^8.4.0",
     "esdoc": "^1.1.0",
     "esdoc-ecmascript-proposal-plugin": "^1.0.0",
     "esdoc-standard-plugin": "^1.0.0",
-    "rollup": "^2.10.8",
+    "rollup": "^2.22.0",
     "rollup-plugin-json": "^4.0.0",
     "rollup-plugin-modify": "^3.0.0"
   }

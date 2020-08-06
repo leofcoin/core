@@ -2,10 +2,8 @@ import { config, debug } from './../utils';
 import { isValid } from './network/validate.js';
 import { TransactionError } from './errors.js';
 import { transactionInputHash, transactionHash } from './hash.js';
-import {chain, mempool} from './dagchain/dagchain';
 import { randomBytes } from 'crypto';
-import { encode, decode } from 'bs58';
-import { getUnspentForAddress } from './dagchain/dagchain-interface';
+// import { getUnspentForAddress } from './dagchain/dagchain-interface';
 import MultiWallet from '@leofcoin/multi-wallet';
 import { network, consensusSubsidyInterval, reward } from '../params.js';
 import * as ipldLfcTx from 'ipld-lfc-tx';
@@ -52,7 +50,7 @@ export const validateTransaction = async (multihash, transaction, unspent) => {
 	if (transaction.reward === 'mined') {
 		// For reward transaction: check if reward output is correct
 		if (transaction.outputs.length !== 1) throw TransactionError('Reward transaction must have exactly one output');
-		if (transaction.outputs[0].amount !== config.reward) throw TransactionError(`Mining reward must be exactly: ${config.reward}`);
+		if (transaction.outputs[0].amount !== reward) throw TransactionError(`Mining reward must be exactly: ${reward}`);
 	} else if (transaction.inputs) {
 		// For normal transaction: check if total output amount equals input amount
 		if (transaction.inputs.reduce((acc, input) => acc + input.amount, 0) !==

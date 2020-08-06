@@ -19,7 +19,7 @@ const args = process.argv.slice(2, process.argv.length);
       if (!response) core();
       await fetch('http://localhost:5050/api/mine')
       // api.mine(api.getMinerConfig())
-    } else if (action === 'run') {
+    } else if (action === 'run') {      
       if (!response) core({network: 'leofcoin'})
     } else if (action === '--intensity') {
       if (!response) core({network: 'leofcoin'})
@@ -27,6 +27,8 @@ const args = process.argv.slice(2, process.argv.length);
       await fetch('http://localhost:5050/api/config/miner?intensity=' + value, {method: 'put'})
     } else if (action === 'wallet') {
       
+    } else if (action === 'genesis') {
+      core({network: args[args.indexOf('--network') + 1]})
     }
   }
 
