@@ -36,7 +36,7 @@ export const core = async (config = {}, genesis = false) => {
     
     if (config.star) {
       Server({port: 5555, protocol: 'peernet-v0.1.0', pubsub: globalThis.pubsub})
-      peerMap.set(api.peerId, api.address)
+      peerMap.set(api.peerId, api.addresses)
     } else {
       const address = 'wss://star.leofcoin.org:5555'
       globalThis.client = await Client(address, 'peernet-v0.1.0', {pubsub: globalThis.pubsub, retry: 3000})
