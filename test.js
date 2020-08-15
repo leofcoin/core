@@ -1,2 +1,2 @@
 const {core} = require('./index');
-core()
+core({star: true})
