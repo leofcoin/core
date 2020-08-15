@@ -4,7 +4,7 @@ import ApiClientApi from './client/api.js'
 export default class HttpClient {
   constructor(config = {}) {
     return (async () => {
-      this.ipfs = await new IpfsClientApi({pubsub: globalThis.pubsub})
+      this.ipfs = await new IpfsClientApi({pubsub: globalThis.pubsub, port: 5051})
       globalThis.pubsub = globalThis.pubsub || {
         publish: this.ipfs.client.publish,
         subscribe: this.ipfs.client.subscribe,

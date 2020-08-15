@@ -86,10 +86,13 @@ export default class Miner {
     }
 
     if (block) {
-      global.ipfs.pubsub.publish('block-added', Buffer.from(JSON.stringify(block)));
+      globalThis.pubsub.publish('block-added', block);
+      globalThis.ipfs.pubsub.publish('block-added', Buffer.from(JSON.stringify(block)));
       console.log(`${job}::Whooooop mined block ${block.index}`);
+      console.log({mining: this.mining});
       if (this.mining) {
         await this.onBlockAdded();
+        console.log('added');
         this.mine(job, block);
       }
     } else {
@@ -109,7 +112,9 @@ export default class Miner {
    * @return {*}
    */
   async mineBlock(difficulty, address, job) {
+    console.log('min');
     const block = await chain.nextBlock(address);
+    console.log("adazd");
     console.log(`${job}::Started mining block ${block.index}`);
 
     return this.findBlockHash(block, difficulty);

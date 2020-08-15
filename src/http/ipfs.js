@@ -34,6 +34,24 @@ export default {
       error(e)
     }
   },
+  swarmPeers: async ({error, send}) => {
+    try {
+      const value = await ipfs.swarm.peers()
+      console.log(value);
+      send(value)
+    } catch (e) {
+      console.log(e);
+      error(e)
+    }
+  },
+  swarmConnect: async({error, send}) => {
+    try {
+      const value = await ipfs.swarm.connect()
+      send(value)
+    } catch (e) {
+      error(e)
+    }
+  },
   'key.list': async ({send, error}) => {
     try {
       const value = await ipfs.key.list()
@@ -94,6 +112,6 @@ export default {
       send(value)
     } catch (e) {
       error(e)
-    }    
+    }
   }
 }

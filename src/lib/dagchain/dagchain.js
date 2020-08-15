@@ -23,11 +23,15 @@ export class DAGChain extends Chain {
     this.announceMessage = this.announceMessage.bind(this);
     this.announceTransaction = this.announceTransaction.bind(this);
     this.invalidTransaction = this.invalidTransaction.bind(this);
+    this.blockAdded = this.blockAdded.bind(this)
   }
 
   async init(genesis) {
     // await globalThis.ipfs.pubsub.subscribe('message-added', this.announceMessage);
     await globalThis.ipfs.pubsub.subscribe('block-added', this.announceBlock);
+    // v1.0.0
+    await globalThis.pubsub.subscribe('block-added', this.blockAdded);
+    
     await globalThis.ipfs.pubsub.subscribe('announce-transaction', this.announceTransaction);
     // await globalThis.ipfs.pubsub.subscribe('invalid-transaction', this.invalidTransaction);
     log(`Running on the ${network} network`);
@@ -43,6 +47,27 @@ export class DAGChain extends Chain {
       debug(error)
       return error
     }
+    
+    this.channels = {}
+    
+    const jobs = []
+    const peers = await ipfs.swarm.peers()
+    for (const {peer} of peers) {
+      
+      if (!this.channels[peer]) {
+        const job = async () => {
+          const channel = await Channel.open(ipfs, peer)
+          this.channels[peer] = channel
+          channel.on('message', message => {
+            console.log({message});
+          })
+          await channel.connect()
+          
+        }
+        jobs.push(job)  
+      }      
+    }
+    await Promise.all(jobs)
   }
   async resolve(name) {
     return await globalThis.ipfs.name.resolve(name, {recursive: true});
@@ -76,6 +101,14 @@ export class DAGChain extends Chain {
     globalThis.pubsub.publish('ready', true);
     // leofcoin.publisher.start()
   }
+  
+  async blockAdded(data) {
+    console.log(data);
+    this.channels.forEach((channel, i) => {
+      channel.send(Buffer.from(JSON.stringify({type: 'block-added', data})))
+    });
+    
+  }
 
   addBlock(block) {
     return new Promise(async (resolve, reject) => {
@@ -87,6 +120,7 @@ export class DAGChain extends Chain {
         }
       
         await globalThis.ipfs.dag.put(block, {format: util.codec, hashAlg: util.defaultHashAlg, version: 1, pin: true})
+        console.log('put');
         // await globalThis.ipfs.dag.get(multihash, {format: util.codec, hashAlg: util.defaultHashAlg, version: 1, pin: true})
         // TODO: block.hash != multihash...
         block.hash = hash;
@@ -111,6 +145,7 @@ export class DAGChain extends Chain {
           debug(`${multihash} pinned`)
           // _transactions.push(node.toJSON())
         }
+        console.log('pinned');
         // chain[block.index].transactions = _transactions
         pubsub.publish('block-added', block);
         debug(`updating current local block: ${hash}`)
@@ -123,7 +158,7 @@ export class DAGChain extends Chain {
         } catch (e) {
           console.warn(e);
         }
-        
+        console.log('epubus');
         try {
           debug(`Publishing ${'/ipfs/' + hash}`)
           await globalThis.ipfs.name.publish('/ipfs/' + hash)
@@ -136,8 +171,12 @@ export class DAGChain extends Chain {
           const index = mempool.indexOf(tx)
           mempool.splice(index)
         })
+        console.log('ok');
+        resolve()
       } catch (e) {
+        
         console.error(e);
+        reject(e)
       }
     });
   }

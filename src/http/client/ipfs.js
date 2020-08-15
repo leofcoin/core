@@ -6,6 +6,10 @@ export default class extends HttpClientApi {
     super(config)
   }
   
+  async request(url, data) {
+    return await this.client.request({url, params: data})
+  }
+  
   async addFromFs(path) {
     return this.put(`addFromFs?data=${path}`);
   }
@@ -46,5 +50,20 @@ export default class extends HttpClientApi {
         return this.get('dag/tree', { hash, path })
       }
     }    
+  }
+  
+  async swarmPeers() {
+    return await this.request('swarmPeers')
+  }
+  
+  get swarm() {
+    return {
+      peers: async () => {
+        return await this.request('swarmPeers')
+      },
+      connect: async addr => {
+        return await this.request('swarmConnect', addr)
+      }
+    }
   }
 }

@@ -12,7 +12,7 @@ export default class HttpClientApi {
     
     this.apiUrl = url => `${address}/${url}`;
     return (async () => {
-      this.client = await Client(address, 'lfc-v0.1.0', {pubsub: config.pubsub, retry: 1000})
+      this.client = await Client(address, 'lfc-v0.1.0', {pubsub: config.pubsub, retry: 5000})
       return this
     })()
   }
