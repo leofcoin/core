@@ -49,6 +49,7 @@
     "@leofcoin/lib": "^0.4.4",
     "@vandeurenglenn/little-pubsub": "^1.2.3",
     "coin-ticker": "^3.2.0",
+    "ipfs-pubsub-1on1": "0.0.6",
     "ipld-lfc": "^0.3.3",
     "ipld-lfc-tx": "^0.4.1",
     "ishex": "^2.1.0",
@@ -60,7 +61,7 @@
     "peer-id": "^0.13.13",
     "randombytes": "^2.1.0",
     "socket-request-client": "^1.4.4",
-    "socket-request-server": "^1.0.1"
+    "socket-request-server": "^1.1.0"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^14.0.0",

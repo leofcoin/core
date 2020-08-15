@@ -14,6 +14,8 @@ import { DAGChain } from './lib/dagchain/dagchain.js';
 import { platform } from 'os';
 import * as _api from './api'
 import http from './http/http'
+import Server from './../node_modules/socket-request-server/src/index'
+import Client from './../node_modules/socket-request-client/src/index'
 
 globalThis.bus = globalThis.bus || bus
 globalThis.peerMap = globalThis.peerMap || new Map()
@@ -30,7 +32,14 @@ export const core = async (config = {}, genesis = false) => {
     // apiServer()
     
     globalThis.pubsub = new Pubsub()
-    http()
+    globalThis.clients = http()
+    
+    if (config.star) {
+      Server({port: 5555, protocol: 'peernet-v0.1.0', pubsub: globalThis.pubsub})
+    }
+    const address = `wss://star.leofcoin.org:5555`
+    globalThis.client = await Client(address, 'peernet-v0.1.0', {pubsub: globalThis.pubsub, retry: 3000})
+    
      // if (!globalThis) 
     try {
       await new GlobalScope(api)

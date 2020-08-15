@@ -23,8 +23,13 @@ export default class extends HttpClientApi {
     })()
     
   }
+  
   async request(url, data) {
     return await this.client.request({url, params: data})
+  }  
+  
+  async ready() {
+    return await this.request('ready')
   }
   
   async version() {

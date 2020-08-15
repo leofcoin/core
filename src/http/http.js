@@ -8,7 +8,7 @@ export default (config = {}) => {
   if (!config.port) config.port = 5050
   if (!config.host) config.host = '127.0.0.1'
     
-  server({port: config.port, protocol: 'lfc-v0.1.0'}, api)
+  globalThis.apiClient = server({port: config.port, protocol: 'lfc-v0.1.0', pubsub: globalThis.pubsub}, api)
   
-  server({port: Number(config.port) + 1, protocol: 'lfc-v0.1.0'}, ipfs)
+  globalThis.ipfsClient = server({port: Number(config.port) + 1, protocol: 'lfc-v0.1.0', pubsub: globalThis.pubsub}, ipfs)
 }

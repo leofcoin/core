@@ -12,7 +12,7 @@ export default class HttpClient {
         subscribers: this.ipfs.client.subscribers
       }
       
-      this.api = await new ApiClientApi({pubsub: globalThis.pubsub})
+      this.api = await new ApiClientApi({pubsub: globalThis.pubsub, port: 5050})
       
       return this
     })()

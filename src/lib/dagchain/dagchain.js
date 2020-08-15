@@ -5,8 +5,10 @@ import { network } from './../../params';
 import { debug, log } from './../../utils';
 import ipldLfc from 'ipld-lfc';
 import ipldLfcTx from 'ipld-lfc-tx';
+import Channel from 'ipfs-pubsub-1on1'
 const {util, LFCNode} = ipldLfc
 const {LFCTx} = ipldLfcTx
+
 
 globalThis.states = globalThis.states || {
   ready: false,
@@ -99,6 +101,8 @@ export class DAGChain extends Chain {
     await this.syncChain();
     globalThis.states.ready = true;
     globalThis.pubsub.publish('ready', true);
+    
+    
     // leofcoin.publisher.start()
   }
   

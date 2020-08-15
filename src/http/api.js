@@ -3,6 +3,10 @@ import {version} from './../../package.json'
 
 export default {
   version: ({send}) => send({client: '@leofcoin/api/http', version}),
+  ready: ({send}) => {
+    if (globalThis.states.ready) send(true)
+    else pubsub.subscribe('ready', () => send(true))
+  },
   setConfig: async (params, {send, error}) => {
     try {
       await api.setConfig(params)
