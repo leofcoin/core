@@ -50,7 +50,7 @@
     "@vandeurenglenn/little-pubsub": "^1.2.3",
     "coin-ticker": "^3.2.0",
     "ipfs-pubsub-1on1": "0.0.6",
-    "ipld-lfc": "^0.3.3",
+    "ipld-lfc": "^0.3.5",
     "ipld-lfc-tx": "^0.4.1",
     "ishex": "^2.1.0",
     "koa": "^2.13.0",
