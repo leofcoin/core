@@ -5,7 +5,6 @@ import { network } from './../../params';
 import { debug, log } from './../../utils';
 import ipldLfc from 'ipld-lfc';
 import ipldLfcTx from 'ipld-lfc-tx';
-import Channel from 'ipfs-pubsub-1on1'
 const {util, LFCNode} = ipldLfc
 const {LFCTx} = ipldLfcTx
 
@@ -108,9 +107,8 @@ export class DAGChain extends Chain {
   
   async blockAdded(data) {
     console.log(data);
-    this.channels.forEach((channel, i) => {
-      channel.send(Buffer.from(JSON.stringify({type: 'block-added', data})))
-    });
+    console.log(peerMap);
+    client.pubsub.publish('block-added', data)
     
   }
 

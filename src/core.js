@@ -34,20 +34,6 @@ export const core = async (config = {}, genesis = false) => {
     globalThis.pubsub = new Pubsub()
     globalThis.clients = http()
     
-    if (config.star) {
-      Server({port: 5555, protocol: 'peernet-v0.1.0', pubsub: globalThis.pubsub})
-      peerMap.set(api.peerId, api.addresses)
-    } else {
-      const address = 'wss://star.leofcoin.org:5555'
-      globalThis.client = await Client(address, 'peernet-v0.1.0', {pubsub: globalThis.pubsub, retry: 3000})
-      
-      
-      const peers = await client.peernet.join({peerId: api.peerId, address: api.addresses})
-      
-      
-      console.log(peers);  
-    }
-    
     
      // if (!globalThis) 
     try {
@@ -96,6 +82,20 @@ export const core = async (config = {}, genesis = false) => {
     // await write(configPath, JSON.stringify(config, null, '\t'));
     const chain = new DAGChain({ genesis, network });
     await chain.init(genesis);
+    
+    if (config.star) {
+      const server = Server({port: 5555, protocol: 'peernet-v0.1.0', pubsub: globalThis.pubsub})
+      peerMap.set(api.peerId, api.addresses)
+      
+      server.pubsub.subscribe('block-added', chain.announceBlock)
+    } else {
+      const address = 'wss://star.leofcoin.org:5555'
+      globalThis.client = await Client(address, 'peernet-v0.1.0', {pubsub: globalThis.pubsub, retry: 3000})
+      
+      
+      const peers = await client.peernet.join({peerId: api.peerId, address: api.addresses})
+      client.pubsub.subscribe('block-added', (data) => console.log(data))
+    }
     return chain;
 	} catch (e) {
     if (e.code === 'ECONNREFUSED' || e.message && e.message.includes('cannot acquire lock')) {
