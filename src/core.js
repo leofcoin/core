@@ -94,7 +94,6 @@ export const core = async (config = {}, genesis = false) => {
       
       
       const peers = await client.peernet.join({peerId: api.peerId, address: api.addresses})
-      client.pubsub.subscribe('block-added', (data) => console.log(data))
     }
     return chain;
 	} catch (e) {

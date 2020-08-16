@@ -29,9 +29,9 @@ export class DAGChain extends Chain {
 
   async init(genesis) {
     // await globalThis.ipfs.pubsub.subscribe('message-added', this.announceMessage);
-    await globalThis.ipfs.pubsub.subscribe('block-added', this.announceBlock);
+    // await globalThis.ipfs.pubsub.subscribe('block-added', this.announceBlock);
     // v1.0.0
-    await globalThis.pubsub.subscribe('block-added', this.blockAdded);
+    await globalThis.pubsub.subscribe('block-added', this.announceBlock);
     
     await globalThis.ipfs.pubsub.subscribe('announce-transaction', this.announceTransaction);
     // await globalThis.ipfs.pubsub.subscribe('invalid-transaction', this.invalidTransaction);
@@ -108,7 +108,6 @@ export class DAGChain extends Chain {
   async blockAdded(data) {
     console.log(data);
     console.log(peerMap);
-    client.pubsub.publish('block-added', data)
     
   }
 
@@ -149,7 +148,7 @@ export class DAGChain extends Chain {
         }
         console.log('pinned');
         // chain[block.index].transactions = _transactions
-        pubsub.publish('block-added', block);
+        pubsub.publish('local-block-added', block);
         debug(`updating current local block: ${hash}`)
 
         await leofcoin.api.chain.updateLocals(hash, block.index);
@@ -203,9 +202,8 @@ export class DAGChain extends Chain {
 
   // TODO: go with previous block instead off lastBlock
   // TODO: validate on sync ...
-  async announceBlock({data, from}) {
-    console.log(data.toString());
-      let block = JSON.parse(data.toString());
+  async announceBlock(block) {
+    console.log(block);
       if (this.chain[block.index]) {
         if (globalThis.pubsub.subscribers['invalid-block']) globalThis.pubsub.publish('invalid-block', block);
         
