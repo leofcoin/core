@@ -29,7 +29,7 @@ export class DAGChain extends Chain {
 
   async init(genesis) {
     // await globalThis.ipfs.pubsub.subscribe('message-added', this.announceMessage);
-    // await globalThis.ipfs.pubsub.subscribe('block-added', this.announceBlock);
+    await globalThis.ipfs.pubsub.subscribe('block-added', this.announceBlock);
     // v1.0.0
     await globalThis.pubsub.subscribe('block-added', this.announceBlock);
     
@@ -203,7 +203,6 @@ export class DAGChain extends Chain {
   // TODO: go with previous block instead off lastBlock
   // TODO: validate on sync ...
   async announceBlock(block) {
-    console.log(block);
       if (this.chain[block.index]) {
         if (globalThis.pubsub.subscribers['invalid-block']) globalThis.pubsub.publish('invalid-block', block);
         
@@ -218,7 +217,9 @@ export class DAGChain extends Chain {
           tx = await new LFCTx(tx)
           await leofcoin.api.transaction.dag.put(tx.toJSON())
         }
+        
         await this.addBlock(block); // add to chai
+        client.pubsub.publish('block-added', block)
         
       } catch (error) {
         // if (!ipldLfc.util.isValid(block)) throw this.BlockError('data');
