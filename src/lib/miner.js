@@ -86,14 +86,18 @@ export default class Miner {
     }
 
     if (block) {
+      console.log(block.transactions);
       globalThis.pubsub.publish('block-added', block);
-      globalThis.ipfs.pubsub.publish('block-added', Buffer.from(JSON.stringify(block)));
+      // globalThis.ipfs.pubsub.publish('block-added', Buffer.from(JSON.stringify(block)));
       console.log(`${job}::Whooooop mined block ${block.index}`);
-      console.log({mining: this.mining});
       if (this.mining) {
         await this.onBlockAdded();
-        console.log('added');
-        this.mine(job, block);
+        console.log(`timeout ${job} for one minute`);
+        console.log('if you think this is unfair, thinking about timing out every miner/core.');
+        setTimeout(() => {
+          this.mine(job, block)
+        }, 60000);
+        
       }
     } else {
       console.log(`${job}::cancelled mining block ${index}`);
@@ -112,9 +116,7 @@ export default class Miner {
    * @return {*}
    */
   async mineBlock(difficulty, address, job) {
-    console.log('min');
     const block = await chain.nextBlock(address);
-    console.log("adazd");
     console.log(`${job}::Started mining block ${block.index}`);
 
     return this.findBlockHash(block, difficulty);
