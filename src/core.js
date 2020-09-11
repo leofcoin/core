@@ -80,8 +80,6 @@ export const core = async (config = {}, genesis = false) => {
       log(`total load prep took ${(Date.now() - now) / 1000} seconds`);
     })
     // await write(configPath, JSON.stringify(config, null, '\t'));
-    const chain = new DAGChain({ genesis, network });
-    await chain.init(genesis);
     
     if (config.star) {
       const server = Server({port: 5555, protocol: 'peernet-v0.1.0', pubsub: globalThis.pubsub})
@@ -95,6 +93,11 @@ export const core = async (config = {}, genesis = false) => {
       
       const peers = await client.peernet.join({peerId: api.peerId, address: api.addresses})
     }
+    
+    const chain = new DAGChain({ genesis, network });
+    await chain.init(genesis);
+    
+    
     return chain;
 	} catch (e) {
     if (e.code === 'ECONNREFUSED' || e.message && e.message.includes('cannot acquire lock')) {
