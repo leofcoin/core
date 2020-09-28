@@ -27,8 +27,24 @@ const sync = async () => {
     globalThis.ipfs.name.publish(multihash)
     const { hash, index } = await chain.longestChain();
     if (index > Number(localIndex)) {
-      leofcoin.currentBlockHash = hash;  
-      leofcoin.currentBlockNode = await leofcoin.api.block.dag.get(leofcoin.currentBlockHash)
+      const job = () => new Promise(async (resolve, reject) => {
+        setTimeout(async () => {
+          reject()
+        }, 5000);        
+        leofcoin.currentBlockHash = hash;  
+        leofcoin.currentBlockNode = await leofcoin.api.block.dag.get(leofcoin.curentBlockHash)
+        resolve()
+      })
+      
+      try {
+        await job()
+      } catch (e) {
+        try {
+          await job()
+        } catch (e) {
+          console.warn("couldn't sync chain");
+        }
+      }
     } else {
       if (index === 0) leofcoin.currentBlockHash = genesisCID
       else leofcoin.currentBlockHash = multihash || await localDAGMultiaddress();
@@ -187,11 +203,11 @@ const resync = async (block) => {
   return;
 }
 
-const timedRequest = (request) => new Promise(async (resolve, reject) => {
+const timedRequest = (fn, params) => new Promise(async (resolve, reject) => {
   setTimeout(() => {
     reject('request timeout')
-  }, 60000);
-  const requested = await request
+  }, 10000);
+  const requested = await fn(params)
   resolve(requested)
 });
 
@@ -231,6 +247,7 @@ export default class GlobalScope {
     
     leofcoin.api.block = {
       get: async multihash => {
+        // Promise.race(promises)
         const node = await leofcoin.api.block.dag.get(multihash)
         return node.toJSON()
       },

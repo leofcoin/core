@@ -203,6 +203,8 @@ export class DAGChain extends Chain {
   // TODO: go with previous block instead off lastBlock
   // TODO: validate on sync ...
   async announceBlock(block) {
+    console.log({transactions: block.transactions});
+    console.log(block.transactions[0].outputs);
       if (this.chain[block.index]) {
         if (globalThis.pubsub.subscribers['invalid-block']) globalThis.pubsub.publish('invalid-block', block);
         
@@ -213,6 +215,7 @@ export class DAGChain extends Chain {
       try {
         // const previousBlock = await lastBlock(); // test
         await this.validateBlock(this.chain[this.chain.length - 1], block, this.difficulty(), await this.getUnspent());
+        console.log({block});
         for await (let tx of block.transactions) {
           tx = await new LFCTx(tx)
           await leofcoin.api.transaction.dag.put(tx.toJSON())

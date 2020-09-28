@@ -80,19 +80,21 @@ export const core = async (config = {}, genesis = false) => {
       log(`total load prep took ${(Date.now() - now) / 1000} seconds`);
     })
     // await write(configPath, JSON.stringify(config, null, '\t'));
-    
+    ipfs.libp2p.on('peer:connect', peer => console.log(peer))
     if (config.star) {
       const server = Server({port: 5555, protocol: 'peernet-v0.1.0', pubsub: globalThis.pubsub})
-      peerMap.set(api.peerId, api.addresses)
       
-      server.pubsub.subscribe('block-added', chain.announceBlock)
-    } else {
-      const address = 'wss://star.leofcoin.org:5555'
-      globalThis.client = await Client(address, 'peernet-v0.1.0', {pubsub: globalThis.pubsub, retry: 3000})
-      
-      
-      const peers = await client.peernet.join({peerId: api.peerId, address: api.addresses})
     }
+    peerMap.set(api.peerId, api.addresses)
+      // server.pubsub.subscribe('block-added', chain.announceBlock)
+    // } else {
+    const address = 'wss://star.leofcoin.org:5555'
+    globalThis.client = await Client(address, 'peernet-v0.1.0', {pubsub: globalThis.pubsub, retry: 3000})
+    
+    
+    const peers = await client.peernet.join({peerId: api.peerId, address: api.addresses})
+    console.log({peers});
+    // }
     
     const chain = new DAGChain({ genesis, network });
     await chain.init(genesis);
