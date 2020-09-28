@@ -204,7 +204,6 @@ export class DAGChain extends Chain {
   // TODO: validate on sync ...
   async announceBlock(block) {
     console.log({transactions: block.transactions});
-    console.log(block.transactions[0].outputs);
       if (this.chain[block.index]) {
         if (globalThis.pubsub.subscribers['invalid-block']) globalThis.pubsub.publish('invalid-block', block);
         
@@ -213,6 +212,15 @@ export class DAGChain extends Chain {
       }
       if (block.index > this.chain[this.chain.length - 1].index + 1) await leofcoin.api.chain.resync(block)
       try {
+        if (block.transactions[0].multihash) {
+          const transactions = []
+          for (const {multihash} of block.transactions[0]) {
+            const tx = await leofcoin.api.transaction.get(multihash)
+            transactions.push(tx)            
+          }
+          
+          block.transactions = transactions
+        }
         // const previousBlock = await lastBlock(); // test
         await this.validateBlock(this.chain[this.chain.length - 1], block, this.difficulty(), await this.getUnspent());
         console.log({block});
