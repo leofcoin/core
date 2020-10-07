@@ -214,7 +214,7 @@ export class DAGChain extends Chain {
       try {
         if (block.transactions[0].multihash) {
           const transactions = []
-          for (const {multihash} of block.transactions[0]) {
+          for (const {multihash} of block.transactions) {
             const tx = await leofcoin.api.transaction.get(multihash)
             transactions.push(tx)            
           }
