@@ -53,8 +53,8 @@ const defaultStarConfig = {
 }
 
 export const core = async (config = {}, genesis = false) => {
-  if (config.star) config = { ...defaultConfig, ...config }
-  else config = { ...defaultStarConfig, ...config }
+  if (config.star) config = { ...defaultStarConfig, ...config }
+  else config = { ...defaultConfig, ...config }
 
   if (config.debug) process.env.DEBUG = true
 
