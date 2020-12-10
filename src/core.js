@@ -64,7 +64,9 @@ export const core = async (config = {}, genesis = false) => {
     bus.emit('stage-one');
 
     // init peernet
-    globalThis.peernet = await new Peernet({ root: 'leofcoin', port })
+    globalThis.peernet = await new Peernet({
+      root: 'leofcoin', port: config.peernet.port
+    })
 
     debug('starting ipfs');
     // TODO: LfcApi out ...
