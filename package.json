@@ -47,7 +47,7 @@
     "@koa/cors": "^3.1.0",
     "@koa/router": "^9.3.1",
     "@leofcoin/lib": "^0.4.4",
-    "@leofcoin/peernet": "^0.3.0",
+    "@leofcoin/peernet": "^0.3.1",
     "@vandeurenglenn/little-pubsub": "^1.2.3",
     "coin-ticker": "^3.2.0",
     "ipfs-pubsub-1on1": "0.0.6",
