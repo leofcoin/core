@@ -30,12 +30,12 @@ const sync = async () => {
       const job = () => new Promise(async (resolve, reject) => {
         setTimeout(async () => {
           reject()
-        }, 5000);        
-        leofcoin.currentBlockHash = hash;  
+        }, 5000);
+        leofcoin.currentBlockHash = hash;
         leofcoin.currentBlockNode = await leofcoin.api.block.dag.get(leofcoin.curentBlockHash)
         resolve()
       })
-      
+
       try {
         await job()
       } catch (e) {
@@ -48,11 +48,11 @@ const sync = async () => {
     } else {
       if (index === 0) leofcoin.currentBlockHash = genesisCID
       else leofcoin.currentBlockHash = multihash || await localDAGMultiaddress();
-      
+
       leofcoin.currentBlockNode = await leofcoin.api.block.dag.get(leofcoin.currentBlockHash)
     }
   console.log(leofcoin.currentBlockNode.toString());
-    log(`current block index : ${localIndex}`);  
+    log(`current block index : ${localIndex}`);
     log(`current block hash : ${leofcoin.currentBlockHash}`);
     log(`current block size: ${Math.round(Number(leofcoin.currentBlockNode.size) * 1e-6 * 100) / 100} Mb (${leofcoin.currentBlockNode.size} bytes)`);
     return leofcoin.currentBlockHash
@@ -67,17 +67,17 @@ const localBlock = async () => {
     const index = await chainStore.get('localIndex')
     // let multihash = await read(localCurrent, 'string'); // read local chain state
     // const { value, remainderPath } = await ipfs.dag.get(multihash, { format: LFCNode.codec, hashAlg: LFCNode.defaultHashAlg, version: 1, pin: true});
-    
+
     // const current = value
     // const node = new LFCNode(current)
-    // 
+    //
     // probably recovering local chain
     if (index === undefined) {
       debug(`invalid block detected, recovering local chain`);
       await chainStore.put('localBlock', genesisCID)
       await chainStore.put('localIndex', 0)
       return localBlock();
-    } else {        
+    } else {
       debug(`current local block: ${index} - ${multihash}`);
     }
     return {
@@ -103,7 +103,7 @@ const resolveBlocks = async (node, index) => {
   for (let tx of globalThis.chain[node.index].transactions) {
     console.log('get');
     if (tx.multihash) tx = await leofcoin.api.transaction.get(tx.multihash)
-    
+
     _tx.push(tx)
   }
   console.log("d");
@@ -136,12 +136,12 @@ const resolveBlocks = async (node, index) => {
 /**
  * last resolved, mined or minted block
  *
- * @param {object} cid - cid instance or baseEncodedString 
+ * @param {object} cid - cid instance or baseEncodedString
  */
 const updateLocals = async (cid, index) => {
   if (cid.isCid && cid.isCid()) cid = cid.toBaseEncodedString();
-  
-  
+
+
   try {
     debug(`updating chainStore to ${index}`);
     await chainStore.put(index, cid)
@@ -152,7 +152,7 @@ const updateLocals = async (cid, index) => {
   } catch (error) {
     throw error
   }
-    
+
 }
 
 const resync = async (block) => {
@@ -216,12 +216,12 @@ export default class GlobalScope {
     globalThis.api = api
     return this._init(api)
   }
-  
+
   async _init({discoClientMap, ipfs, peerId, discoServer}) {
     // this.discoServer = discoServer
     // globalThis.pubsubRequest = await new PubsubRequest({ipfs, peerId}, this.api)
     globalThis.peerId = peerId
-    globalThis.getTx = async multihash => globalThis.ipfs.dag.get(multihash, { format: LFCTx.codec, hashAlg: LFCTx.defaultHashAlg, vesion: 1, baseFormat: 'base58btc' })
+    globalThis.getTx = async multihash => globalThis.ipfs.dag.get(multihash, { format: LFCTxUtil.codec, hashAlg: LFCTxUtil.defaultHashAlg, vesion: 1, baseFormat: 'base58btc' })
     leofcoin.sync = sync
     leofcoin.dial = async (addr, protocol = 'disco') => {
       // peer already connected
@@ -244,8 +244,15 @@ export default class GlobalScope {
       // get request as soon as possible
       return Promise.race(requests)
     }
-    
+
     leofcoin.api.block = {
+      put: async multihash => {
+        try {
+
+        } catch (e) {
+          throw e
+        }
+      },
       get: async multihash => {
         // Promise.race(promises)
         const node = await leofcoin.api.block.dag.get(multihash)
@@ -257,6 +264,14 @@ export default class GlobalScope {
             const { value } = await globalThis.ipfs.dag.get(multihash)
             value.transactions = [...value.transactions]
             return await new LFCNode({...value})
+          } catch (e) {
+            throw e
+          }
+        },
+        put: async node => {
+          try {
+            console.log(node.toJSON());
+            globalThis.ipfs.dag.put(node, { format: util.codec, hashAlg: util.defaultHashAlg, vesion: 1, baseFormat: 'base58btc'})
           } catch (e) {
             throw e
           }
@@ -302,12 +317,12 @@ export default class GlobalScope {
       },
       dag: {
         get: async multihash => {
-          const {value} = await globalThis.ipfs.dag.get(multihash, { format: LFCTx.codec, hashAlg: LFCTx.defaultHashAlg, vesion: 1, baseFormat: 'base58btc' })
+          const {value} = await globalThis.ipfs.dag.get(multihash, { format: LFCTxUtil.codec, hashAlg: LFCTxUtil.defaultHashAlg, vesion: 1, baseFormat: 'base58btc' })
           return new LFCTx(value)
         },
         put: async node => {
           return globalThis.ipfs.dag.put(node, { format: LFCTxUtil.codec, hashAlg: LFCTxUtil.defaultHashAlg, version: 1, baseFormat: 'base58btc' })
-          
+
         }
       }
     }
@@ -345,7 +360,7 @@ export default class GlobalScope {
             return blocks
           }
           if (!isNaN(hash)) hash = await leofcoin.hashMap.get(hash)
-          
+
           return leofcoin.api.block.dag.get(hash)
         }
       }
@@ -359,7 +374,7 @@ export default class GlobalScope {
       if (typeof height !== 'string') return globalThis.chain[height]
       return globalThis.chain[blockHashSet[height]];
     }
-    
+
     leofcoin.publisher = {
       start: () => {
         const publish = async () => {
@@ -368,11 +383,11 @@ export default class GlobalScope {
            */
           const publishments = [{ hash: leofcoin.currentBlockHash }]
           let promises = []
-          
+
           for (const { hash, key } of publishments) {
             promises.push(leofcoin.api.name.publish(hash))
           }
-          
+
           promises = await Promise.all(promises)
           console.log(promises);
         }
@@ -382,7 +397,7 @@ export default class GlobalScope {
         }, hour(23))
       }
     }
-    
+
     leofcoin.resetToLocalIndex = async () => {
       const store = await chainStore.get()
       const keys = Object.keys(store)
@@ -395,13 +410,13 @@ export default class GlobalScope {
             value.hash  = store[key]
           }
         }
-        
+
       }
       chainStore.put('localBlock', value.hash)
       chainStore.put('localIndex', Number(value.index))
     }
   }
-    
+
   get api() {
     return {
       chainHeight: () => (leofcoin.chain.length - 1),
@@ -411,7 +426,7 @@ export default class GlobalScope {
       lastBlock: () => {
         const index = (globalThis.chain.length - 1)
         return globalThis.chain[index]
-      } 
-    }    
+      }
+    }
   }
 }

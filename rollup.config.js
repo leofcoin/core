@@ -48,7 +48,7 @@ export default [
 	        resolve()
 	      })`
 			})
-		],
+		]
 		// plugins: [
 		// 	uglify()
 		// ],

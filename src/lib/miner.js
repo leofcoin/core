@@ -88,6 +88,7 @@ export default class Miner {
     if (block) {
       console.log(block.transactions);
       globalThis.pubsub.publish('block-added', block);
+      globalThis.ipfs.pubsub.publish('block-added', Buffer.from(JSON.stringify(block)));
       // globalThis.ipfs.pubsub.publish('block-added', Buffer.from(JSON.stringify(block)));
       console.log(`${job}::Whooooop mined block ${block.index}`);
       if (this.mining) {

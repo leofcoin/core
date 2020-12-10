@@ -17,6 +17,21 @@ import http from './http/http'
 import Server from './../node_modules/socket-request-server/src/index'
 import Client from './../node_modules/socket-request-client/src/index'
 
+import Peernet from './../node_modules/@leofcoin/peernet/dist/module/peernet.js'
+pubsub.subscribe('data', data => {
+  console.log(data.toString());
+})
+
+pubsub.subscribe('peer:connected', async peer => setInterval(async () => {
+  // const dhtMessage = new DHTMessage({hash: 'hello'})
+  // console.log(dhtMessage.encoded);
+  // const message = new PeernetMessage({ from: client.id, to: peer.id, data: dhtMessage.encoded, signature: Buffer.from('pnsig') })
+  // console.log(message.encoded);
+  //   console.log(await peer.request(message.encoded));
+  // console.log(peer);
+  const data = await peernet.get('hello')
+  // console.log(data.toString())
+}, 10000))
 globalThis.bus = globalThis.bus || bus
 globalThis.peerMap = globalThis.peerMap || new Map()
 
@@ -26,24 +41,32 @@ export const core = async (config = {}, genesis = false) => {
 	try {
     const now = Date.now();
     bus.emit('stage-one');
-    
+
+    // init peernet
+    globalThis.peernet = await new Peernet({ root: 'leofcoin' })
     debug('starting ipfs');
     const api = await new LfcApi({ init: true, start: true, bootstrap: 'lfc', forceJS: true, star: config.star, network: config.network})
     // apiServer()
-    
-    globalThis.pubsub = new Pubsub()
+
+    globalThis.pubsub = globalThis.pubsub || new Pubsub()
     globalThis.clients = http()
-    
-    
-     // if (!globalThis) 
+
+    // checkpoint
+      // await chainStore.put('localBlock', 'zsNS6wZiHUQ8R4MZLcGVuM1Y1V6JQJdDEuLBUTBXFyTuBCk3DwY2JNezZw2dvxSkcw5qZioqLKuBwqTi2adEgNHxLrbcem')
+      // await chainStore.put('localIndex', 266)
+     // if (!globalThis)
     try {
       await new GlobalScope(api)
     } catch (e) {
+      if (e.code === 'ERR_LOCK_EXISTS') setTimeout(async () => {
+        await new GlobalScope(api)
+      }, 5000);
+      console.log('warning');
       console.warn(e);
     }
     // globalThis.id = api.peerId;
     // globalThis.ipfs = api.ipfs;
-    
+
     const ipfsd_now = Date.now();
     // await connectBootstrap();
 
@@ -83,23 +106,22 @@ export const core = async (config = {}, genesis = false) => {
     ipfs.libp2p.on('peer:connect', peer => console.log(peer))
     if (config.star) {
       const server = Server({port: 5555, protocol: 'peernet-v0.1.0', pubsub: globalThis.pubsub})
-      
+
     }
     peerMap.set(api.peerId, api.addresses)
       // server.pubsub.subscribe('block-added', chain.announceBlock)
     // } else {
     const address = 'wss://star.leofcoin.org:5555'
     globalThis.client = await Client(address, 'peernet-v0.1.0', {pubsub: globalThis.pubsub, retry: 3000})
-    
-    
+
+
     const peers = await client.peernet.join({peerId: api.peerId, address: api.addresses})
-    console.log({peers});
     // }
-    
+
     const chain = new DAGChain({ genesis, network });
     await chain.init(genesis);
-    
-    
+
+
     return chain;
 	} catch (e) {
     if (e.code === 'ECONNREFUSED' || e.message && e.message.includes('cannot acquire lock')) {
