@@ -36,16 +36,41 @@ globalThis.bus = globalThis.bus || bus
 globalThis.peerMap = globalThis.peerMap || new Map()
 
 export {_api as api}
+
+const defaultConfig = {
+  peernet: {
+    port: 2000,
+    protocol: 'peernet-v0.1.0'
+  }
+}
+
+const defaultStarConfig = {
+  peernet: {
+    port: 2020,
+    protocol: 'peernet-v0.1.0'
+  }
+
+}
+
 export const core = async (config = {}, genesis = false) => {
+  if (config.star) config = { ...defaultConfig, ...config }
+  else config = { ...defaultStarConfig, ...config }
+
   if (config.debug) process.env.DEBUG = true
+
+  const { port, network, star } = config
 	try {
     const now = Date.now();
     bus.emit('stage-one');
 
     // init peernet
-    globalThis.peernet = await new Peernet({ root: 'leofcoin' })
+    globalThis.peernet = await new Peernet({ root: 'leofcoin', port })
+
     debug('starting ipfs');
-    const api = await new LfcApi({ init: true, start: true, bootstrap: 'lfc', forceJS: true, star: config.star, network: config.network})
+    // TODO: LfcApi out ...
+    const api = await new LfcApi({
+      init: true, start: true, bootstrap: 'lfc', forceJS: true, star, network
+    })
     // apiServer()
 
     globalThis.pubsub = globalThis.pubsub || new Pubsub()
@@ -104,24 +129,11 @@ export const core = async (config = {}, genesis = false) => {
     })
     // await write(configPath, JSON.stringify(config, null, '\t'));
     ipfs.libp2p.on('peer:connect', peer => console.log(peer))
-    if (config.star) {
-      const server = Server({port: 5555, protocol: 'peernet-v0.1.0', pubsub: globalThis.pubsub})
-
-    }
+    // TODO: ?
     peerMap.set(api.peerId, api.addresses)
-      // server.pubsub.subscribe('block-added', chain.announceBlock)
-    // } else {
-    const address = 'wss://star.leofcoin.org:5555'
-    globalThis.client = await Client(address, 'peernet-v0.1.0', {pubsub: globalThis.pubsub, retry: 3000})
 
-
-    const peers = await client.peernet.join({peerId: api.peerId, address: api.addresses})
-    // }
-
-    const chain = new DAGChain({ genesis, network });
-    await chain.init(genesis);
-
-
+    const chain = new DAGChain({ genesis, network })
+    await chain.init(genesis)
     return chain;
 	} catch (e) {
     if (e.code === 'ECONNREFUSED' || e.message && e.message.includes('cannot acquire lock')) {

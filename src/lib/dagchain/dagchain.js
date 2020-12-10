@@ -184,53 +184,55 @@ export class DAGChain extends Chain {
   // TODO: go with previous block instead off lastBlock
   // TODO: validate on sync ...
   async announceBlock(block) {
-    console.log(globalThis.peernet.peers);
     if (block.data) block = JSON.parse(block.data.toString())
     console.log({transactions: block.transactions});
-      if (this.chain[block.index]) {
-        if (globalThis.pubsub.subscribers['invalid-block']) globalThis.pubsub.publish('invalid-block', block);
 
-        // await globalThis.ipfs.pubsub.publish('invalid-block', Buffer.from(JSON.stringify(block)));
-        return
-      }
+    if (this.chain[block.index]) {
+      if (globalThis.pubsub.subscribers['invalid-block']) globalThis.pubsub.publish('invalid-block', block);
 
-      console.log('out of sync');
-      if (block.index > this.chain[this.chain.length - 1].index + 1) await leofcoin.api.chain.resync(block)
-      try {
-        if (block.transactions[0].multihash) {
-          const transactions = []
-          for (const {multihash} of block.transactions) {
-            const tx = await leofcoin.api.transaction.get(multihash)
-            transactions.push(tx)
-          }
-
-          block.transactions = transactions
-        }
-        // const previousBlock = await lastBlock(); // test
-        await this.validateBlock(this.chain[this.chain.length - 1], block, this.difficulty(), await this.getUnspent());
-        console.log({block});
-        for await (let tx of block.transactions) {
-          tx = await new LFCTx(tx)
-          await leofcoin.api.transaction.dag.put(tx.toJSON())
-        }
-
-        await this.addBlock(block); // add to chai
-        client.pubsub.publish('block-added', block)
-
-      } catch (error) {
-        // if (!ipldLfc.util.isValid(block)) throw this.BlockError('data');
-      	// console.log(block, previousBlock);
-      	if (await this.blockHash(block) !== block.hash) console.error('hash')
-      	if (this.getDifficulty(block.hash) > this.difficulty()) console.error('hash')
-
-        // TODO: remove publish invalid-block
-        debug(`Invalid block ${block.hash}`)
-        if (globalThis.pubsub.subscribers['invalid-block']) globalThis.pubsub.publish('invalid-block', block);
-
-        // await globalThis.ipfs.pubsub.publish('invalid-block', Buffer.from(JSON.stringify(block)));
-        console.log('invalid', error);
-        // await this.resync(block)
-        return
-      }
+      // await globalThis.ipfs.pubsub.publish('invalid-block', Buffer.from(JSON.stringify(block)));
+      return
     }
+    // TODO: decent testing needed
+    if (block.index > this.chain[this.chain.length - 1].index + 1) await leofcoin.api.chain.resync(block)
+    try {
+      if (block.transactions[0].multihash) {
+        const transactions = []
+        for (const {multihash} of block.transactions) {
+          const tx = await leofcoin.api.transaction.get(multihash)
+          transactions.push(tx)
+        }
+
+        block.transactions = transactions
+      }
+      // const previousBlock = await lastBlock(); // test
+      await this.validateBlock(this.chain[this.chain.length - 1], block, this.difficulty(), await this.getUnspent());
+      console.log({block});
+      for await (let tx of block.transactions) {
+        tx = await new LFCTx(tx)
+        await leofcoin.api.transaction.dag.put(tx.toJSON())
+      }
+
+      await this.addBlock(block); // add to chai
+
+      if (peernet) {
+        peernet.publish('block-added', block)
+      }
+
+    } catch (error) {
+      // if (!ipldLfc.util.isValid(block)) throw this.BlockError('data');
+    	// console.log(block, previousBlock);
+    	if (await this.blockHash(block) !== block.hash) console.error('hash')
+    	if (this.getDifficulty(block.hash) > this.difficulty()) console.error('hash')
+
+      // TODO: remove publish invalid-block
+      debug(`Invalid block ${block.hash}`)
+      if (globalThis.pubsub.subscribers['invalid-block']) globalThis.pubsub.publish('invalid-block', block);
+
+      // await globalThis.ipfs.pubsub.publish('invalid-block', Buffer.from(JSON.stringify(block)));
+      console.log('invalid', error);
+      // await this.resync(block)
+      return
+    }
+  }
 }
