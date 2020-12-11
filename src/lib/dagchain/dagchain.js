@@ -31,9 +31,13 @@ export class DAGChain extends Chain {
     // await globalThis.ipfs.pubsub.subscribe('message-added', this.announceMessage);
     // await globalThis.ipfs.pubsub.subscribe('block-added', this.announceBlock);
     // v1.0.0
-    await globalThis.pubsub.subscribe('block-added', this.announceBlock);
+    // await globalThis.pubsub.subscribe('block-added', this.announceBlock);
+    if (peernet) {
+      peernet.subscribe('block-added', this.announceBlock)
+      peernet.subscribe('announce-transaction', this.announceTransaction)
+    }
 
-    await globalThis.pubsub.subscribe('announce-transaction', this.announceTransaction);
+    // await globalThis.pubsub.subscribe('announce-transaction', this.announceTransaction);
     // await globalThis.ipfs.pubsub.subscribe('invalid-transaction', this.invalidTransaction);
     log(`Running on the ${network} network`);
         // TODO: finishe the genesis module
@@ -215,6 +219,7 @@ export class DAGChain extends Chain {
 
       await this.addBlock(block); // add to chai
 
+      block = JSON.stringify(block)
       if (peernet) {
         peernet.publish('block-added', block)
       }
