@@ -188,6 +188,7 @@ export class DAGChain extends Chain {
   // TODO: go with previous block instead off lastBlock
   // TODO: validate on sync ...
   async announceBlock(block) {
+    console.log({block})
     if (block.data) block = JSON.parse(block.data.toString())
     console.log({transactions: block.transactions});
 
@@ -219,8 +220,9 @@ export class DAGChain extends Chain {
 
       await this.addBlock(block); // add to chai
 
-      block = JSON.stringify(block)
+
       if (peernet) {
+        block = JSON.stringify(block)
         peernet.publish('block-added', block)
       }
 

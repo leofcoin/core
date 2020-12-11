@@ -22,16 +22,7 @@ pubsub.subscribe('data', data => {
   console.log(data.toString());
 })
 
-pubsub.subscribe('peer:connected', async peer => setInterval(async () => {
-  // const dhtMessage = new DHTMessage({hash: 'hello'})
-  // console.log(dhtMessage.encoded);
-  // const message = new PeernetMessage({ from: client.id, to: peer.id, data: dhtMessage.encoded, signature: Buffer.from('pnsig') })
-  // console.log(message.encoded);
-  //   console.log(await peer.request(message.encoded));
-  // console.log(peer);
-  const data = await peernet.get('hello')
-  // console.log(data.toString())
-}, 10000))
+pubsub.subscribe('peer:connected', async peer => console.log(peer))
 globalThis.bus = globalThis.bus || bus
 globalThis.peerMap = globalThis.peerMap || new Map()
 
