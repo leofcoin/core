@@ -31,7 +31,7 @@ export class DAGChain extends Chain {
     // await globalThis.ipfs.pubsub.subscribe('message-added', this.announceMessage);
     // await globalThis.ipfs.pubsub.subscribe('block-added', this.announceBlock);
     // v1.0.0
-    // await globalThis.pubsub.subscribe('block-added', this.announceBlock);
+    await globalThis.pubsub.subscribe('block-added', this.announceBlock);
     if (peernet) {
       peernet.subscribe('block-added', this.announceBlock)
       peernet.subscribe('announce-transaction', this.announceTransaction)
@@ -188,8 +188,9 @@ export class DAGChain extends Chain {
   // TODO: go with previous block instead off lastBlock
   // TODO: validate on sync ...
   async announceBlock(block) {
+    console.log({block});
+    block = JSON.parse(block)
     console.log({block})
-    if (block.data) block = JSON.parse(block.data.toString())
     console.log({transactions: block.transactions});
 
     if (this.chain[block.index]) {
