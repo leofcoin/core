@@ -22,7 +22,7 @@ pubsub.subscribe('data', data => {
   console.log(data.toString());
 })
 
-pubsub.subscribe('peer:connected', async peer => console.log(peer))
+// pubsub.subscribe('peer:connected', async peer => console.log(peer))
 globalThis.bus = globalThis.bus || bus
 globalThis.peerMap = globalThis.peerMap || new Map()
 
@@ -106,7 +106,7 @@ export const core = async (config = {}, genesis = false) => {
       console.log('close');
     })
     process.on('SIGINT', async () => {
-      console.log("Caught interrupt signal");
+      console.log("Caught interrupt signal")
       setTimeout(async () => {
         process.exit();
       }, 50);

@@ -41,8 +41,9 @@ export default class Miner {
     return new Promise((resolve, reject) => {
       this._onBlockAdded = block => {
         this.mineStop()
-        globalThis.pubsub.unsubscribe('block-added', this._onBlockAdded);
+        globalThis.pubsub.unsubscribe('local-block-added', this._onBlockAdded);
         globalThis.pubsub.unsubscribe('invalid-block', this._onBlockInvalid);
+        globalThis.pubsub.unsubscribe('block-mined', this._onBlockMined);
         resolve(block);
       }
       this._onBlockInvalid = block => {
@@ -51,7 +52,12 @@ export default class Miner {
         globalThis.pubsub.unsubscribe('invalid-block', this._onBlockInvalid);
         resolve(null);
       }
-      globalThis.pubsub.subscribe('block-added', this._onBlockAdded);
+      this._onBlockMined = block => {
+        this.mineStop()
+      }
+
+      globalThis.pubsub.subscribe('local-block-added', this._onBlockAdded);
+      globalThis.pubsub.subscribe('block-mined', this._onBlockMined);
       globalThis.pubsub.subscribe('invalid-block', this._onBlockInvalid);
     });
   }
@@ -66,6 +72,11 @@ export default class Miner {
     } catch (e) {
       console.error(e)
     }
+  }
+
+  removeListeners() {
+    globalThis.pubsub.unsubscribe('block-mined', this._onBlockMined)
+    globalThis.pubsub.unsubscribe('invalid-block', this._onBlockInvalid)
   }
 
   stop() {
@@ -86,9 +97,8 @@ export default class Miner {
     }
 
     if (block) {
-      console.log(block.transactions);
-      globalThis.pubsub.publish('block-added', block);
-      globalThis.ipfs.pubsub.publish('block-added', Buffer.from(JSON.stringify(block)));
+      globalThis.pubsub.publish('block-mined', block);
+      // globalThis.ipfs.pubsub.publish('block-added', Buffer.from(JSON.stringify(block)));
       // globalThis.ipfs.pubsub.publish('block-added', Buffer.from(JSON.stringify(block)));
       console.log(`${job}::Whooooop mined block ${block.index}`);
       if (this.mining) {
@@ -98,11 +108,14 @@ export default class Miner {
         setTimeout(() => {
           this.mine(job, block)
         }, 60000);
-        
+
       }
     } else {
       console.log(`${job}::cancelled mining block ${index}`);
-      if (this.mining) this.mine(job);
+      if (this.mining) {
+        await this.onBlockAdded()
+        this.mine(job)
+      }
     }
 
   }
@@ -132,43 +145,23 @@ export default class Miner {
    */
   findBlockHash (block, difficulty) {
     return new Promise((resolve, reject) => {
-      const worker = fork(this.workerPath);
       /*
        * Create worker to find hash in separate process
        */
+      const worker = fork(this.workerPath)
 
-
-       /*
-        * Hadnle events to stop mining when needed
-        */
       this.mineStop = () => {
-       removeListeners()
-       worker.kill('SIGINT')
-       resolve({block: null, hashCount: null, index: block.index});
+        this.removeListeners()
+        worker.kill('SIGINT')
+        resolve({block: null, hashCount: null, index: block.index});
       }
 
-      // Listeners for stopping mining
-      const blockAddedListener = b => {
-        if (b.index >= block.index) this.mineStop()
-      }
-      const mineStopListener = b => this.mineStop
-      const removeListeners = () => {
-       globalThis.pubsub.unsubscribe('block-added', blockAddedListener)
-       globalThis.pubsub.unsubscribe('mine-stop', mineStopListener)
-      }
-      // If other process found the same block faster, kill current one
-      globalThis.pubsub.subscribe('block-added', blockAddedListener)
-      globalThis.pubsub.subscribe('mine-stop', mineStopListener)
-      // const result = await minerWorker({block, difficulty})
       worker.on('message', (data) => {
-        removeListeners();
-
-        resolve({block: data.block, hashes: data.hashCount});
-        worker.kill('SIGINT');
+        resolve({block: data.block, hashes: data.hashCount})
+        worker.kill('SIGINT')
       })
-      worker.send({block, difficulty});
-
-    });
+      worker.send({block, difficulty})
+    })
   }
 
 }

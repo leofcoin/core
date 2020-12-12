@@ -32,6 +32,8 @@ export class DAGChain extends Chain {
     // await globalThis.ipfs.pubsub.subscribe('block-added', this.announceBlock);
     // v1.0.0
     await globalThis.pubsub.subscribe('block-added', this.announceBlock);
+    await globalThis.pubsub.subscribe('block-mined', this.announceBlock);
+
     if (peernet) {
       peernet.subscribe('block-added', this.announceBlock)
       peernet.subscribe('announce-transaction', this.announceTransaction)
@@ -108,7 +110,6 @@ export class DAGChain extends Chain {
         if (!block.isLFCNode) {
           block = await new LFCNode(block)
         }
-        console.log({block});
         await leofcoin.api.block.dag.put(block)
         block.hash = hash;
         chain[block.index] = block.toJSON();
@@ -132,7 +133,6 @@ export class DAGChain extends Chain {
           debug(`${multihash} pinned`)
           // _transactions.push(node.toJSON())
         }
-        console.log('pinned');
         // chain[block.index].transactions = _transactions
         pubsub.publish('local-block-added', block);
         debug(`updating current local block: ${hash}`)
@@ -188,8 +188,7 @@ export class DAGChain extends Chain {
   // TODO: go with previous block instead off lastBlock
   // TODO: validate on sync ...
   async announceBlock(block) {
-    console.log({block});
-    block = JSON.parse(block)
+    if (typeof block !== 'object') block = JSON.parse(block)
     console.log({block})
     console.log({transactions: block.transactions});
 
