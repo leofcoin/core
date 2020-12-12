@@ -48,7 +48,7 @@ export default class Miner {
       }
       this._onBlockInvalid = block => {
         this.mineStop()
-        globalThis.pubsub.unsubscribe('block-added', this._onBlockAdded);
+        globalThis.pubsub.unsubscribe('local-block-added', this._onBlockAdded);
         globalThis.pubsub.unsubscribe('invalid-block', this._onBlockInvalid);
         resolve(null);
       }
