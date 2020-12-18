@@ -41,15 +41,10 @@ export default class Miner {
     return new Promise((resolve, reject) => {
       this._onBlockAdded = block => {
         this.mineStop()
-        globalThis.pubsub.unsubscribe('local-block-added', this._onBlockAdded);
-        globalThis.pubsub.unsubscribe('invalid-block', this._onBlockInvalid);
-        globalThis.pubsub.unsubscribe('block-mined', this._onBlockMined);
         resolve(block);
       }
       this._onBlockInvalid = block => {
         this.mineStop()
-        globalThis.pubsub.unsubscribe('local-block-added', this._onBlockAdded);
-        globalThis.pubsub.unsubscribe('invalid-block', this._onBlockInvalid);
         resolve(null);
       }
       this._onBlockMined = block => {
@@ -75,8 +70,9 @@ export default class Miner {
   }
 
   removeListeners() {
-    globalThis.pubsub.unsubscribe('block-mined', this._onBlockMined)
-    globalThis.pubsub.unsubscribe('invalid-block', this._onBlockInvalid)
+    globalThis.pubsub.unsubscribe('local-block-added', this._onBlockAdded);
+    globalThis.pubsub.unsubscribe('block-mined', this._onBlockMined);
+    globalThis.pubsub.unsubscribe('invalid-block', this._onBlockInvalid);
   }
 
   stop() {
@@ -105,15 +101,11 @@ export default class Miner {
         await this.onBlockAdded();
         console.log(`timeout ${job} for one minute`);
         console.log('if you think this is unfair, thinking about timing out every miner/core.');
-        setTimeout(() => {
-          this.mine(job, block)
-        }, 60000);
 
       }
     } else {
       console.log(`${job}::cancelled mining block ${index}`);
       if (this.mining) {
-        await this.onBlockAdded()
         this.mine(job)
       }
     }

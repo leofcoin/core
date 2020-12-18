@@ -42,7 +42,7 @@ export const setMinerConfig = async minerConfig => {
 }
 
 export const blocks = async (number, last) => {
-  await state('ready', true)
+  // await state('ready', true)
   if (!number) return globalThis.chain
   else if (last) {
     return globalThis.chain.slice((globalThis.chain.length - number), globalThis.chain.length);
@@ -50,7 +50,7 @@ export const blocks = async (number, last) => {
 };
 
 export const transactions = async (number, last) => {
-  await state('ready', true)
+  // await state('ready', true)
   if (!number) return globalThis.chain[globalThis.chain.length - 1].transactions.map(tx => {
     tx.parentHash = globalThis.chain[globalThis.chain.length - 1].hash
     return tx;
@@ -73,7 +73,7 @@ export const transactions = async (number, last) => {
 };
 
 export const mine = async config => {
-  await state('ready', true)
+  // await state('ready', true)
   if (!config) {
     config = await accountStore.get('config')
     config = config.miner
@@ -134,9 +134,9 @@ const accounts = async (discoverDepth = 0) => {
   let accounts = undefined;
   try {
     wallet = leofcoin.wallet;
-    console.log('state');
+    // console.log('state');
     // await state('ready', true);
-    console.log('state');
+    // console.log('state');
     accounts = discoverAccounts(wallet, discoverDepth);
   } catch (e) {
     console.log('readied');
@@ -164,8 +164,7 @@ const _addresses = ([account], depth = 0) => {
 }
 
 const addresses = async () => {
-  console.log('add');
-  await state('ready', true)
+  // await state('ready', true)
   let call = 0;
   console.log('addresses');
   let _accounts = await accounts();
@@ -220,7 +219,7 @@ export const send = async ({from, to, amount, message}, response) => {
     // const cid = await util.cid(tx.serialize())
     // { multihash: cid.toBaseEncodedString(), size: tx.size};
     globalThis.ipfs.pubsub.publish('announce-transaction', JSON.stringify(value))
-    
+
     tx.hash = hashFromMultihash(value.multihash)
     value = tx
   } catch (e) {

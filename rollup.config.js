@@ -9,7 +9,7 @@ import cmjs from '@rollup/plugin-commonjs'
 
 export default [
 	// ES module version, for modern browsers
-	
+
 
 	{
 		input: ['src/lib/workers/miner-worker.js'],
@@ -41,7 +41,7 @@ export default [
 		    STORAGE_IMPORT: `new Promise((resolve, reject) => {
 		      if (!LeofcoinStorage) LeofcoinStorage = require('@leofcoin/storage');
 		      resolve()
-		    });`,				
+		    });`,
 	      QRCODE_IMPORT: `if (!QRCode) QRCode = require('qrcode');`,
 	      IPFS_IMPORT: `new Promise((resolve, reject) => {
 	        if (!Ipfs) Ipfs = require('ipfs');
@@ -66,7 +66,7 @@ export default [
 		plugins:[json()],
 	},
 	{
-		input: ['src/core.js'],
+		input: ['src/core.js', 'src/bus.js'],
 		output: {
 			dir: 'dist/module',
 			format: 'es',

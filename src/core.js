@@ -1,4 +1,4 @@
-import Pubsub from '@vandeurenglenn/little-pubsub'
+import './bus'
 import LfcApi from 'lfc-api';
 import { debug, log, groupCollapsed } from './utils';
 import bus from './lib/bus';
@@ -16,7 +16,7 @@ import * as _api from './api'
 import http from './http/http'
 import Server from './../node_modules/socket-request-server/src/index'
 import Client from './../node_modules/socket-request-client/src/index'
-
+// import LFCBlock from './lib/messages/block'
 import Peernet from './../node_modules/@leofcoin/peernet/dist/module/peernet.js'
 pubsub.subscribe('data', data => {
   console.log(data.toString());
@@ -55,15 +55,18 @@ export const core = async (config = {}, genesis = false) => {
     bus.emit('stage-one');
 
     // init peernet
-    globalThis.peernet = await new Peernet({
+    await new Peernet({
       root: 'leofcoin', port: config.peernet.port
     })
-
+    // await peernet.addCodec('lfc-block', {
+    //   codec: LFCBlock.codec, hashAlg: LFCBlock.hashAlg
+    // })
+    // await peernet.addProto('leofcoin-block', LFCBlock)
     debug('starting ipfs');
     // TODO: LfcApi out ...
-    const api = await new LfcApi({
-      init: true, start: true, bootstrap: 'lfc', forceJS: true, star, network
-    })
+    // const api = await new LfcApi({
+    //   init: true, start: true, bootstrap: 'lfc', forceJS: true, star, network
+    // })
     // apiServer()
 
     globalThis.pubsub = globalThis.pubsub || new Pubsub()
@@ -74,7 +77,7 @@ export const core = async (config = {}, genesis = false) => {
       // await chainStore.put('localIndex', 266)
      // if (!globalThis)
     try {
-      await new GlobalScope(api)
+      await new GlobalScope()
     } catch (e) {
       if (e.code === 'ERR_LOCK_EXISTS') setTimeout(async () => {
         await new GlobalScope(api)
@@ -95,9 +98,9 @@ export const core = async (config = {}, genesis = false) => {
     process.on('exit', async () => {
       console.log('exit');
         try {
-          await globalThis.ipfs.pubsub.unsubscribe('block-added');
-          await globalThis.ipfs.pubsub.unsubscribe('announce-transaction');
-          await globalThis.ipfs.pubsub.unsubscribe('invalid-transaction');
+          await globalThis.pubsub.unsubscribe('block-added');
+          await globalThis.pubsub.unsubscribe('announce-transaction');
+          await globalThis.pubsub.unsubscribe('invalid-transaction');
         } catch (e) {
           console.log(e);
         }
@@ -120,10 +123,6 @@ export const core = async (config = {}, genesis = false) => {
       log(`peer connection took: ${(connection_now - ipfsd_now) / 1000} seconds`);
       log(`total load prep took ${(Date.now() - now) / 1000} seconds`);
     })
-    // await write(configPath, JSON.stringify(config, null, '\t'));
-    ipfs.libp2p.on('peer:connect', peer => console.log(peer))
-    // TODO: ?
-    peerMap.set(api.peerId, api.addresses)
 
     const chain = new DAGChain({ genesis, network })
     await chain.init(genesis)

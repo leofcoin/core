@@ -110,7 +110,9 @@ export class DAGChain extends Chain {
         if (!block.isLFCNode) {
           block = await new LFCNode(block)
         }
-        await leofcoin.api.block.dag.put(block)
+        await blockStore.put(hash, block.serialize())
+
+        // await leofcoin.api.block.dag.put(block)
         block.hash = hash;
         chain[block.index] = block.toJSON();
         leofcoin.hashMap.set(block.index, hash)
@@ -119,12 +121,15 @@ export class DAGChain extends Chain {
 
         const _transactions = [];
         for (const {multihash} of chain[block.index].transactions) {
-          const node = await leofcoin.api.transaction.dag.get(multihash)
-          await leofcoin.api.transaction.dag.put(node)
-
+          let tx = await leofcoin.api.transaction.get(multihash)
+          console.log({tx: tx.toJSON()});
+          await leofcoin.api.transaction.put(tx.toJSON())
+          // const node = await leofcoin.api.transaction.dag.get(multihash)
+          // await leofcoin.api.transaction.dag.put(node)
           try {
+            // todo add to ipfs in the background
             debug(`pinning: ${multihash}`);
-            await leofcoin.api.pin.add(multihash)
+            // await leofcoin.api.pin.add(multihash)
             // await this.publish(multihash);
           } catch (e) {
             console.warn(e);
@@ -141,14 +146,6 @@ export class DAGChain extends Chain {
         try {
           debug(`pinning: ${'/ipfs/' + hash}`);
           await leofcoin.api.pin.add('/ipfs/' + hash)
-        } catch (e) {
-          console.warn(e);
-        }
-        console.log('epubus');
-        try {
-          debug(`Publishing ${'/ipfs/' + hash}`)
-          await globalThis.ipfs.name.publish('/ipfs/' + hash)
-          // await this.publish(multihash);
         } catch (e) {
           console.warn(e);
         }
@@ -214,8 +211,10 @@ export class DAGChain extends Chain {
       await this.validateBlock(this.chain[this.chain.length - 1], block, this.difficulty(), await this.getUnspent());
       console.log({block});
       for await (let tx of block.transactions) {
-        tx = await new LFCTx(tx)
-        await leofcoin.api.transaction.dag.put(tx.toJSON())
+        // tx = await new LFCTx(tx)
+        console.log({tx});
+        // await peernet.put(tx, tx.toJSON())
+        await leofcoin.api.transaction.put(tx)
       }
 
       await this.addBlock(block); // add to chai
