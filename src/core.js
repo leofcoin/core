@@ -1,5 +1,4 @@
 import './bus'
-import LfcApi from 'lfc-api';
 import { debug, log, groupCollapsed } from './utils';
 import bus from './lib/bus';
 import GlobalScope from './global-scope';

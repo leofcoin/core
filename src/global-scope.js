@@ -20,7 +20,6 @@ const sync = async () => {
       await chainStore.put('localBlock', genesisCID)
       await chainStore.put('localIndex', 0)
       const node = await new LFCNode(GENESISBLOCK)
-      console.log(await node.serialize());
       await leofcoin.api.block.put(node)
       // await blockStore.put(genesisCID, node.serialize())
     }
@@ -68,7 +67,8 @@ const sync = async () => {
 
 const localBlock = async () => {
   try {
-    const multihash = await chainStore.get('localBlock')
+    let multihash = await chainStore.get('localBlock')
+    multihash = multihash.toString()
     const index = await chainStore.get('localIndex')
     // let multihash = await read(localCurrent, 'string'); // read local chain state
     // const { value, remainderPath } = await ipfs.dag.get(multihash, { format: LFCNode.codec, hashAlg: LFCNode.defaultHashAlg, version: 1, pin: true});
@@ -232,9 +232,9 @@ export default class GlobalScope {
 
     leofcoin.api.transaction = {
       get: async multihash => {
-        const node = await peernet.get(multihash)
+        const node = await peernet.transaction.get(multihash)
         console.log({node});
-        return await new LFCTx(Buffer.from(node))
+        return await new LFCTx(node)
       },
       put: async node => {
         console.log({put: node});
@@ -244,7 +244,7 @@ export default class GlobalScope {
         const data = await node.serialize()
         const cid = await LFCTxUtil.cid(data)
         console.log(cid, data);
-        await peernet.put(cid.toString('base58btc'), data)
+        await peernet.transaction.put(cid.toString('base58btc'), data)
         // return globalThis.ipfs.dag.put(node, { format: LFCTxUtil.codec, hashAlg: LFCTxUtil.defaultHashAlg, version: 1, baseFormat: 'base58btc' })
 
       }
@@ -257,11 +257,11 @@ export default class GlobalScope {
         const data = await node.serialize()
         const cid = await util.cid(data)
         console.log(cid, data);
-        await peernet.put(cid.toString('base58btc'), data)
+        await peernet.block.put(cid.toString('base58btc'), data)
       },
       get: async multihash => {
         // Promise.race(promises)
-        const node = await peernet.get(multihash)
+        const node = await peernet.block.get(multihash)
         return await new LFCNode(Buffer.from(node))
       }
       // dag: {

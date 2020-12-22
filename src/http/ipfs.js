@@ -1,10 +1,6 @@
-import {dependencies} from './../../node_modules/lfc-api/package.json'
-
-const version = dependencies.ipfs.replace('^', '');
-
 export default {
   version: ({send}) => send({client: '@leofcoin/ipfs/http', version}),
-  addFromFs: async (params, {send, error}) => {    
+  addFromFs: async (params, {send, error}) => {
     try {
       if (!globalThis.globSource) {
         GLOBSOURCE_IMPORT
@@ -14,7 +10,7 @@ export default {
       for await (const file of ipfs.addAll(glob)) {
         files.push(file)
       }
-      
+
       send(files.map(file => {
         file.cid = file.cid.toString()
         return file
@@ -28,7 +24,7 @@ export default {
       let value
       if (params.put) value = await ipfs.block.put(params.path, params.options)
       else value = await ipfs.block.get(params.path, params.options);
-      
+
       send(value)
     } catch (e) {
       error(e)
@@ -80,10 +76,10 @@ export default {
     try {
       const { dag, format, hashAlg, mode } = params
       let value = params.value
-      
+
       if (mode==='put') value = await ipfs.dag.put(value, {format, hashAlg})
       else value = await ipfs.dag.get(value);
-      
+
       send(value)
     } catch (e) {
       error(e)

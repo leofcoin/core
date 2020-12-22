@@ -110,7 +110,7 @@ export class DAGChain extends Chain {
         if (!block.isLFCNode) {
           block = await new LFCNode(block)
         }
-        await blockStore.put(hash, block.serialize())
+        await leofcoin.api.block.put(block)
 
         // await leofcoin.api.block.dag.put(block)
         block.hash = hash;

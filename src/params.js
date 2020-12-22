@@ -1,7 +1,7 @@
 import { join } from 'path';
 import { homedir } from 'os';
 import * as bs58 from 'bs58';
-import coinTicker from 'coin-ticker';
+// import coinTicker from 'coin-ticker';
 import {hour} from './ms'
 const { decode, encode } = bs58
 const argv = process.argv;
@@ -122,26 +122,26 @@ export const checkpoints = [
 // 				  prices[pair].push(1 / Number(result.last))
 // 				} else {
 // 					exchanges.splice(exchanges.indexOf(exchange))
-// 				}	
+// 				}
 // 			}
-// 
-// 
+//
+//
 // 		} catch (e) {
 // 		 exchanges.splice(exchanges.indexOf(exchange))
 // 		}
 // 		// stable.pairs.set('BTC', getValueFor('BTC'))
 // 	}
-// 
+//
 // 	for (const key of Object.keys(prices)) {
 // 		priceMap.set(key, median(prices[key]))
 // 	}
 // 	console.log(priceMap.entries());
-// 	// const name = 
+// 	// const name =
 // }
-// 
+//
 // if (pegged) {
 // 	stable.currency = 'EUR';
-// 	stable.value = 1;	
+// 	stable.value = 1;
 // 	stable.pairs  = new Map();
 // 	(async () => await getPairValue(['BTC_EUR', 'LTC_EUR', 'ETH_EUR']))();
 // 	setInterval(async () => {
@@ -149,7 +149,7 @@ export const checkpoints = [
 // 		// stable.pairs.set('BTC', getValueFor('BTC'))
 // 	}, hour(1));
 // }
-// 
+//
 
 
 
