@@ -8,6 +8,7 @@ import { debug } from './utils'
 import { hour } from './ms'
 
 const chain = new Chain()
+import * as api from './api'
 
 globalThis.leofcoin = globalThis.leofcoin || {}
 leofcoin.api = leofcoin.api || {}
@@ -218,8 +219,7 @@ const timedRequest = (fn, params) => new Promise(async (resolve, reject) => {
 
 export default class GlobalScope {
   constructor(api) {
-    globalThis.api = api
-    return this._init(api)
+    return this._init()
   }
 
   async _init() {
@@ -229,7 +229,10 @@ export default class GlobalScope {
     // leofcoin.peers = this.discoServer.connections
     // leofcoin.peerMap = this.discoServer.peerMap
     // leofcoin.discoClientMap = discoClientMap
-
+    leofcoin.utils = {
+      hashFromMultihash: chain.hashFromMultihash
+    }
+    leofcoin.api = leofcoin.api ? {...leofcoin.api, ...api} : {...api}
     leofcoin.api.transaction = {
       get: async multihash => {
         const node = await peernet.transaction.get(multihash)
@@ -397,6 +400,22 @@ export default class GlobalScope {
       chainStore.put('localBlock', value.hash)
       chainStore.put('localIndex', Number(value.index))
     }
+
+    pubsub.subscribe('peer:connected', async peer => {
+      const request = new globalThis.peernet.protos['peernet-request']({request: Buffer.from('lastBlock')})
+      const to = peernet._getPeerId(peer.id)
+
+      if (to) {
+        const node = await peernet.prepareMessage(to, request.encoded)
+        let response = await peer.request(node.encoded)
+        const proto = new globalThis.peernet.protos['peernet-message'](Buffer.from(response.data))
+        response = new globalThis.peernet.protos['peernet-response'](Buffer.from(response.data))
+        console.log(response);
+        console.log(response.decoded.response.toString());
+        const block = JSON.parse(response.decoded.response.toString().replace('��\nv', ''))
+        if (Number(block.index) > Number(localBlock.index)) resync(block)
+      }
+    })
   }
 
   get api() {
