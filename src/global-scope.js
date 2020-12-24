@@ -409,12 +409,12 @@ export default class GlobalScope {
         const node = await peernet.prepareMessage(to, request.encoded)
         let response = await peer.request(node.encoded)
         const proto = new globalThis.peernet.protos['peernet-message'](Buffer.from(response.data))
-        console.log(proto);
         response = new globalThis.peernet.protos['peernet-response'](Buffer.from(proto.decoded.data))
-        console.log(response);
-        console.log(response.decoded.response.toString());
-        const block = JSON.parse(response.decoded.response)
-        if (Number(block.index) > Number(localBlock.index)) resync(block)
+        let block = JSON.parse(response.decoded.response)
+        if (Number(block.height) > Number(localBlock.index)) {
+          block = await leofcoin.api.block.get(block.hash)
+          resync(block.decoded)
+        }
       }
     })
   }
