@@ -70,8 +70,7 @@ export default {
   balance: async (params, {send, error}) => {
     console.log('balance');
     try {
-      console.log(await api.getBalanceForAddress(params.address));
-      const value = await api.getBalanceForAddress(params.address)
+      const value = await api.balance(params.address)
       send(value)
     } catch (e) {
       console.log(e);

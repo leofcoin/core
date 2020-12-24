@@ -4,6 +4,7 @@ import { discoverAccounts } from './lib/wallet-utils.js';
 import { or } from './shorten.js';
 import bus from './lib/bus.js';
 import Miner from './lib/miner.js';
+import MultiWallet from './../node_modules/@leofcoin/multi-wallet/src/index'
 // TODO: multiwallet in browser
 const miners = [];
 const chain = new Chain()
@@ -133,16 +134,22 @@ const accounts = async (discoverDepth = 0) => {
   let wallet;
   let accounts = undefined;
   try {
-    wallet = leofcoin.wallet;
+    const identity = await walletStore.get('identity')
+    wallet = new MultiWallet('leofcoin');
+    wallet.import(identity.multiWIF)
+    console.log(wallet);
     // console.log('state');
     // await state('ready', true);
     // console.log('state');
     accounts = discoverAccounts(wallet, discoverDepth);
   } catch (e) {
+    console.warn(e);
     console.log('readied');
   }
   return accounts;
 }
+
+export const balance = address => getBalanceForAddress(address)
 
 export const accountNames = async () => {
   let accounts = await walletStore.get('accounts')
