@@ -402,17 +402,18 @@ export default class GlobalScope {
     }
 
     pubsub.subscribe('peer:connected', async peer => {
-      const request = new globalThis.peernet.protos['peernet-request']({request: Buffer.from('lastBlock')})
+      const request = new globalThis.peernet.protos['peernet-request']({request: 'lastBlock'})
       const to = peernet._getPeerId(peer.id)
 
       if (to) {
         const node = await peernet.prepareMessage(to, request.encoded)
         let response = await peer.request(node.encoded)
         const proto = new globalThis.peernet.protos['peernet-message'](Buffer.from(response.data))
-        response = new globalThis.peernet.protos['peernet-response'](Buffer.from(response.data))
+        console.log(proto);
+        response = new globalThis.peernet.protos['peernet-response'](Buffer.from(proto.decoded.data))
         console.log(response);
         console.log(response.decoded.response.toString());
-        const block = JSON.parse(response.decoded.response.toString().replace('��\nv', ''))
+        const block = JSON.parse(response.decoded.response)
         if (Number(block.index) > Number(localBlock.index)) resync(block)
       }
     })
