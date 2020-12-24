@@ -101,7 +101,11 @@ export default class Miner {
         await this.onBlockAdded();
         console.log(`timeout ${job} for one minute`);
         console.log('if you think this is unfair, thinking about timing out every miner/core.');
-
+        setTimeout(() => {
+          if (this.mining) {
+            this.mine(job)
+          }
+        }, 60000);
       }
     } else {
       console.log(`${job}::cancelled mining block ${index}`);
