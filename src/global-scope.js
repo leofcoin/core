@@ -56,7 +56,6 @@ const sync = async () => {
 
       leofcoin.currentBlockNode = await leofcoin.api.block.get(leofcoin.currentBlockHash)
     }
-  console.log(leofcoin.currentBlockNode.toString());
     log(`current block index : ${localIndex}`);
     log(`current block hash : ${leofcoin.currentBlockHash}`);
     log(`current block size: ${Math.round(Number(leofcoin.currentBlockNode.size) * 1e-6 * 100) / 100} Mb (${leofcoin.currentBlockNode.size} bytes)`);
@@ -71,12 +70,6 @@ const localBlock = async () => {
     let multihash = await chainStore.get('localBlock')
     multihash = multihash.toString()
     const index = await chainStore.get('localIndex')
-    // let multihash = await read(localCurrent, 'string'); // read local chain state
-    // const { value, remainderPath } = await ipfs.dag.get(multihash, { format: LFCNode.codec, hashAlg: LFCNode.defaultHashAlg, version: 1, pin: true});
-
-    // const current = value
-    // const node = new LFCNode(current)
-    //
     // probably recovering local chain
     if (index === undefined) {
       debug(`invalid block detected, recovering local chain`);
@@ -105,12 +98,16 @@ const resolveBlocks = async (node, index) => {
   globalThis.chain[node.index] = node.toJSON();
   globalThis.chain[node.index].hash = cid.toBaseEncodedString()
   const _tx = [];
-  console.log('bef get');
+  debug(`loading transactions`)
   for (let tx of globalThis.chain[node.index].transactions) {
     console.log('get');
-    if (tx.multihash) tx = await leofcoin.api.transaction.get(tx.multihash)
-
-    _tx.push(tx.toJSON())
+    const hash = tx.multihash
+    if (hash) {
+      tx = await leofcoin.api.transaction.get(hash)
+      tx = tx.toJSON()
+    }
+    _tx.push(tx)
+    debug(`loaded tx: ${hash}`)
   }
   console.log("d");
   globalThis.chain[node.index].transactions = _tx
@@ -411,9 +408,10 @@ export default class GlobalScope {
         const proto = new globalThis.peernet.protos['peernet-message'](Buffer.from(response.data))
         response = new globalThis.peernet.protos['peernet-response'](Buffer.from(proto.decoded.data))
         let block = JSON.parse(response.decoded.response)
-        if (Number(block.height) > Number(localBlock.index)) {
+        const { localIndex } = await localBlock();
+        if (Number(block.height) > Number(localIndex)) {
           block = await leofcoin.api.block.get(block.hash)
-          resync(block.decoded)
+          resync(block.toJSON())
         }
       }
     })
