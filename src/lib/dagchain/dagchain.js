@@ -50,7 +50,6 @@ export class DAGChain extends Chain {
 
     try {
       if (!genesis) await this.loadChain();
-      leofcoin.publisher.start()
     } catch (error) {
       debug(error)
       return error
