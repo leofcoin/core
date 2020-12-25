@@ -26,30 +26,29 @@ const sync = async () => {
     }
     // console.log(await leofcoin.block.dag.get("zsNS6wZiHT3AuWEsd6sE6oPEcCnd2pWcNKPfNUofoEybxx57Y45N4xJKBAdZH1Uh8Wm3e1k2nNhhuSai9z3WAK6pHtpmjg"));
     const { localIndex, multihash } = await localBlock();
-    console.log({localIndex}, {multihash} );
     // const localIndex = await chainStore.get('localIndex')
     // const c = await chainStore.get('localBlock')
     // globalThis.ipfs.name.publish(multihash)
     const { hash, index } = await chain.longestChain();
     if (index > Number(localIndex)) {
-      const job = () => new Promise(async (resolve, reject) => {
-        setTimeout(async () => {
-          reject()
-        }, 5000);
+      // const job = () => new Promise(async (resolve, reject) => {
+      //   setTimeout(async () => {
+      //     reject()
+      //   }, 5000);
         leofcoin.currentBlockHash = hash;
         leofcoin.currentBlockNode = await leofcoin.api.block.get(leofcoin.curentBlockHash)
-        resolve()
-      })
+      //   resolve()
+      // })
 
-      try {
-        await job()
-      } catch (e) {
-        try {
-          await job()
-        } catch (e) {
-          console.warn("couldn't sync chain");
-        }
-      }
+      // try {
+      //   await job()
+      // } catch (e) {
+      //   try {
+      //     await job()
+      //   } catch (e) {
+      //     console.warn("couldn't sync chain");
+      //   }
+      // }
     } else {
       if (index === 0) leofcoin.currentBlockHash = genesisCID
       else leofcoin.currentBlockHash = multihash || await localDAGMultiaddress();
@@ -111,12 +110,13 @@ const resolveBlocks = async (node, index) => {
   leofcoin.hashMap.set(node.index, cid.toBaseEncodedString())
   debug(`loaded block: ${node.index} - ${globalThis.chain[node.index].hash}`);
   if (node.index - 1 !== -1) {
-    debug('loading block')
+      const hash = node.prevHash
       node = await leofcoin.api.block.get(node.prevHash)
-      const has = await leofcoin.api.block.has(node.prevHash)
+      const has = await leofcoin.api.block.has(hash)
       if (!has) {
-        await chainStore.put(node.index, leofcoin.hashMap.get(node.index))
-        debug(`added block: ${node.index}`);
+        await leofcoin.api.block.put(node)
+        await chainStore.put(node.index, hash)
+        debug(`added block: ${node.index} ${hash}`);
       }
     // }
     try {
@@ -365,7 +365,6 @@ export default class GlobalScope {
           }
 
           promises = await Promise.all(promises)
-          console.log(promises);
         }
         publish()
         setInterval(() => {

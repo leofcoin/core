@@ -110,7 +110,8 @@ export class DAGChain extends Chain {
         if (!block.isLFCNode) {
           block = await new LFCNode(block)
         }
-        await leofcoin.api.block.put(block)
+        if (!await leofcoin.api.block.has(hash)) await leofcoin.api.block.put(block)
+
 
         // await leofcoin.api.block.dag.put(block)
         block.hash = hash;
@@ -121,9 +122,10 @@ export class DAGChain extends Chain {
 
         const _transactions = [];
         for (const {multihash} of chain[block.index].transactions) {
-          let tx = await leofcoin.api.transaction.get(multihash)
-          console.log({tx: tx.toJSON()});
-          await leofcoin.api.transaction.put(tx.toJSON())
+          if (!await leofcoin.api.transaction.has(multihash)) {
+            const tx = await leofcoin.api.transaction.get(multihash)
+            await leofcoin.api.transaction.put(tx)
+          }
           // const node = await leofcoin.api.transaction.dag.get(multihash)
           // await leofcoin.api.transaction.dag.put(node)
           try {
@@ -134,8 +136,6 @@ export class DAGChain extends Chain {
           } catch (e) {
             console.warn(e);
           }
-
-          debug(`${multihash} pinned`)
           // _transactions.push(node.toJSON())
         }
         // chain[block.index].transactions = _transactions
@@ -154,7 +154,7 @@ export class DAGChain extends Chain {
           const index = mempool.indexOf(tx)
           mempool.splice(index)
         })
-        console.log('ok');
+        console.log('done');
         resolve()
       } catch (e) {
 
@@ -186,8 +186,6 @@ export class DAGChain extends Chain {
   // TODO: validate on sync ...
   async announceBlock(block) {
     if (typeof block !== 'object') block = JSON.parse(block)
-    console.log({block})
-    console.log({transactions: block.transactions});
 
     if (this.chain[block.index]) {
       if (globalThis.pubsub.subscribers['invalid-block']) globalThis.pubsub.publish('invalid-block', block);
@@ -196,7 +194,9 @@ export class DAGChain extends Chain {
       return
     }
     // TODO: decent testing needed
+    // TODO: validate before resync
     if (block.index > this.chain[this.chain.length - 1].index + 1) await leofcoin.api.chain.resync(block)
+
     try {
       if (block.transactions[0].multihash) {
         const transactions = []
@@ -209,15 +209,14 @@ export class DAGChain extends Chain {
       }
       // const previousBlock = await lastBlock(); // test
       await this.validateBlock(this.chain[this.chain.length - 1], block, this.difficulty(), await this.getUnspent());
-      console.log({block});
+
       for await (let tx of block.transactions) {
-        // tx = await new LFCTx(tx)
-        console.log({tx});
-        // await peernet.put(tx, tx.toJSON())
-        await leofcoin.api.transaction.put(tx)
+        if (!await leofcoin.api.transaction.has(multihash)) {
+          await leofcoin.api.transaction.put(tx)
+        }
       }
 
-      await this.addBlock(block); // add to chai
+      await this.addBlock(block); // add to chain
 
 
       if (peernet) {
