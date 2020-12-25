@@ -256,7 +256,8 @@ export default class GlobalScope {
         // Promise.race(promises)
         const node = await peernet.block.get(multihash)
         return await new LFCNode(Buffer.from(node))
-      }
+      },
+      has: multihash => peernet.block.has(multihash)
       // dag: {
       //   get: async multihash => {
       //     try {
