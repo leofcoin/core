@@ -26,7 +26,7 @@ const sync = async () => {
     }
     // console.log(await leofcoin.block.dag.get("zsNS6wZiHT3AuWEsd6sE6oPEcCnd2pWcNKPfNUofoEybxx57Y45N4xJKBAdZH1Uh8Wm3e1k2nNhhuSai9z3WAK6pHtpmjg"));
     const { localIndex, multihash } = await localBlock();
-    console.log(localIndex, multihash );
+    console.log({localIndex}, {multihash} );
     // const localIndex = await chainStore.get('localIndex')
     // const c = await chainStore.get('localBlock')
     // globalThis.ipfs.name.publish(multihash)
@@ -94,13 +94,11 @@ const localBlock = async () => {
 
 const resolveBlocks = async (node, index) => {
   const cid = await util.cid(await node.serialize())
-  console.log(cid);
   globalThis.chain[node.index] = node.toJSON();
   globalThis.chain[node.index].hash = cid.toBaseEncodedString()
   const _tx = [];
   debug(`loading transactions`)
   for (let tx of globalThis.chain[node.index].transactions) {
-    console.log('get');
     const hash = tx.multihash
     if (hash) {
       tx = await leofcoin.api.transaction.get(hash)
@@ -109,15 +107,14 @@ const resolveBlocks = async (node, index) => {
     _tx.push(tx)
     debug(`loaded tx: ${hash}`)
   }
-  console.log("d");
   globalThis.chain[node.index].transactions = _tx
   leofcoin.hashMap.set(node.index, cid.toBaseEncodedString())
   debug(`loaded block: ${node.index} - ${globalThis.chain[node.index].hash}`);
-  console.log(node.prevHash.length, node.index - 1);
   if (node.index - 1 !== -1) {
     debug('loading block')
       node = await leofcoin.api.block.get(node.prevHash)
-      if (node.index > index) {
+      const has = await leofcoin.api.block.has(node.prevHash)
+      if (!has) {
         await chainStore.put(node.index, leofcoin.hashMap.get(node.index))
         debug(`added block: ${node.index}`);
       }
@@ -233,17 +230,14 @@ export default class GlobalScope {
     leofcoin.api.transaction = {
       get: async multihash => {
         const node = await peernet.transaction.get(multihash)
-        console.log({node});
         return await new LFCTx(node)
       },
       put: async node => {
-        console.log({put: node});
         if (!node.isLFCTx) {
           node = await new LFCTx(node)
         }
         const data = await node.serialize()
         const cid = await LFCTxUtil.cid(data)
-        console.log(cid, data);
         await peernet.transaction.put(cid.toString('base58btc'), data)
         // return globalThis.ipfs.dag.put(node, { format: LFCTxUtil.codec, hashAlg: LFCTxUtil.defaultHashAlg, version: 1, baseFormat: 'base58btc' })
 
@@ -256,7 +250,6 @@ export default class GlobalScope {
         }
         const data = await node.serialize()
         const cid = await util.cid(data)
-        console.log(cid, data);
         await peernet.block.put(cid.toString('base58btc'), data)
       },
       get: async multihash => {
@@ -398,7 +391,13 @@ export default class GlobalScope {
       chainStore.put('localIndex', Number(value.index))
     }
 
+    let ready = false
+
     pubsub.subscribe('peer:connected', async peer => {
+      if (!ready) {
+        ready = true
+        pubsub.publish('peernet:ready', ready)
+      }
       const request = new globalThis.peernet.protos['peernet-request']({request: 'lastBlock'})
       const to = peernet._getPeerId(peer.id)
 

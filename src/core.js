@@ -124,7 +124,9 @@ export const core = async (config = {}, genesis = false) => {
     })
 
     const chain = new DAGChain({ genesis, network })
-    await chain.init(genesis)
+    pubsub.subscribe('peernet:ready', () => {
+      chain.init(genesis)
+    })
     return chain;
 	} catch (e) {
     if (e.code === 'ECONNREFUSED' || e.message && e.message.includes('cannot acquire lock')) {
