@@ -40,20 +40,33 @@ export default class Miner {
   onBlockAdded() {
     return new Promise((resolve, reject) => {
       this._onBlockAdded = block => {
-        this.mineStop()
+
+        globalThis.pubsub.unsubscribe('local-block-added', this._onBlockAdded);
+        globalThis.pubsub.unsubscribe('block-mined', this._onBlockMined);
+        globalThis.pubsub.unsubscribe('invalid-block', this._onBlockInvalid);
         resolve(block);
       }
       this._onBlockInvalid = block => {
         this.mineStop()
+
+        globalThis.pubsub.unsubscribe('local-block-added', this._onBlockAdded);
+        globalThis.pubsub.unsubscribe('block-mined', this._onBlockMined);
+        globalThis.pubsub.unsubscribe('invalid-block', this._onBlockInvalid);
         resolve(null);
       }
       this._onBlockMined = block => {
+
+        globalThis.pubsub.unsubscribe('local-block-added', this._onBlockAdded);
+        globalThis.pubsub.unsubscribe('block-mined', this._onBlockMined);
+        globalThis.pubsub.unsubscribe('invalid-block', this._onBlockInvalid);
         this.mineStop()
       }
 
       globalThis.pubsub.subscribe('local-block-added', this._onBlockAdded);
       globalThis.pubsub.subscribe('block-mined', this._onBlockMined);
       globalThis.pubsub.subscribe('invalid-block', this._onBlockInvalid);
+
+
     });
   }
 
@@ -70,9 +83,9 @@ export default class Miner {
   }
 
   removeListeners() {
-    globalThis.pubsub.unsubscribe('local-block-added', this._onBlockAdded);
-    globalThis.pubsub.unsubscribe('block-mined', this._onBlockMined);
-    globalThis.pubsub.unsubscribe('invalid-block', this._onBlockInvalid);
+    globalThis.pubsub.unsubscribe('local-block-added', this._onBlockAdded, this);
+    globalThis.pubsub.unsubscribe('block-mined', this._onBlockMined, this);
+    globalThis.pubsub.unsubscribe('invalid-block', this._onBlockInvalid, this);
   }
 
   stop() {
@@ -127,6 +140,7 @@ export default class Miner {
    */
   async mineBlock(difficulty, address, job) {
     const block = await chain.nextBlock(address);
+    console.log(block);
     console.log(`${job}::Started mining block ${block.index}`);
 
     return this.findBlockHash(block, difficulty);
@@ -147,7 +161,6 @@ export default class Miner {
       const worker = fork(this.workerPath)
 
       this.mineStop = () => {
-        this.removeListeners()
         worker.kill('SIGINT')
         resolve({block: null, hashCount: null, index: block.index});
       }
