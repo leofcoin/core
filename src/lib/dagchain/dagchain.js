@@ -109,15 +109,13 @@ export class DAGChain extends Chain {
         chain[block.index] = block
 
         for await (let tx of block.transactions) {
-          console.log(tx);
-          tx = await new LFCTx(tx)
-          console.log(tx.toJSON());
-          const cid = await ipldLfcTx.util.cid(await tx.serialize())
+          const node = await new LFCTx({...tx})
+          const cid = await ipldLfcTx.util.cid(await node.serialize())
           if (!await leofcoin.api.transaction.has(cid.toString('base58btc'))) {
-            await leofcoin.api.transaction.put(tx)
+            await leofcoin.api.transaction.put(node)
           }
         }
-        if (!await leofcoin.api.block.has(hash)) await leofcoin.api.block.put(block)
+        if (!await leofcoin.api.block.has(hash)) await leofcoin.api.block.put({...block})
 
         // await leofcoin.api.block.get(hash)
 
@@ -188,7 +186,7 @@ console.log(block.transactions);
         await leofcoin.api.transaction.put(tx)
       }
 console.log(block.transactions);
-      await this.addBlock(block);
+      await this.addBlock({...block});
       if (peernet) {
         block = JSON.stringify(block)
         peernet.publish('block-added', block)
