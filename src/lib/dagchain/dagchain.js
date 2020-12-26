@@ -21,6 +21,7 @@ export class DAGChain extends Chain {
   constructor({genesis}) {
     super();
     this.announceBlock = this.announceBlock.bind(this);
+    this.blockMined = this.blockMined.bind(this);
     this.announceMessage = this.announceMessage.bind(this);
     this.announceTransaction = this.announceTransaction.bind(this);
     this.invalidTransaction = this.invalidTransaction.bind(this);
@@ -32,7 +33,7 @@ export class DAGChain extends Chain {
     // await globalThis.ipfs.pubsub.subscribe('block-added', this.announceBlock);
     // v1.0.0
     await globalThis.pubsub.subscribe('block-added', this.announceBlock);
-    await globalThis.pubsub.subscribe('block-mined', this.announceBlock);
+    await globalThis.pubsub.subscribe('block-mined', this.blockMined);
 
     if (peernet) {
       peernet.subscribe('block-added', this.announceBlock)
@@ -79,11 +80,7 @@ export class DAGChain extends Chain {
   }
 
   async syncChain() {
-    globalThis.states.syncing = true;
-    globalThis.pubsub.publish('syncing', true);
     await leofcoin.api.chain.resync()
-    globalThis.pubsub.publish('syncing', false)
-    globalThis.states.syncing = false;
     return;
   }
 
@@ -107,49 +104,42 @@ export class DAGChain extends Chain {
       try {
         const { index, hash } = block
         log(`add block: ${index}  ${hash}`);
-        if (!block.isLFCNode) {
-          block = await new LFCNode(block)
+
+        block.hash = hash;
+        chain[block.index] = block
+
+        for await (let tx of block.transactions) {
+          console.log(tx);
+          tx = await new LFCTx(tx)
+          console.log(tx.toJSON());
+          const cid = await ipldLfcTx.util.cid(await tx.serialize())
+          if (!await leofcoin.api.transaction.has(cid.toString('base58btc'))) {
+            await leofcoin.api.transaction.put(tx)
+          }
         }
         if (!await leofcoin.api.block.has(hash)) await leofcoin.api.block.put(block)
 
+        // await leofcoin.api.block.get(hash)
 
         // await leofcoin.api.block.dag.put(block)
-        block.hash = hash;
-        chain[block.index] = block.toJSON();
+
         leofcoin.hashMap.set(block.index, hash)
         // TODO: blockHashSet
         // block.transactions = block.transactions.map(link => link.toJSON())
 
-        const _transactions = [];
-        for (const {multihash} of chain[block.index].transactions) {
-          if (!await leofcoin.api.transaction.has(multihash)) {
-            const tx = await leofcoin.api.transaction.get(multihash)
-            await leofcoin.api.transaction.put(tx)
-          }
-          // const node = await leofcoin.api.transaction.dag.get(multihash)
-          // await leofcoin.api.transaction.dag.put(node)
-          try {
-            // todo add to ipfs in the background
-            debug(`pinning: ${multihash}`);
-            // await leofcoin.api.pin.add(multihash)
-            // await this.publish(multihash);
-          } catch (e) {
-            console.warn(e);
-          }
-          // _transactions.push(node.toJSON())
-        }
         // chain[block.index].transactions = _transactions
         pubsub.publish('local-block-added', block);
         debug(`updating current local block: ${hash}`)
 
         await leofcoin.api.chain.updateLocals(hash, block.index);
-        try {
-          debug(`pinning: ${'/ipfs/' + hash}`);
-          await leofcoin.api.pin.add('/ipfs/' + hash)
-        } catch (e) {
-          console.warn(e);
-        }
+        // try {
+        //   debug(`pinning: ${'/ipfs/' + hash}`);
+        //   await leofcoin.api.pin.add('/ipfs/' + hash)
+        // } catch (e) {
+        //   console.warn(e);
+        // }
         block.transactions.forEach(async tx => {
+          console.log(tx);
           // const {value} = await globalThis.ipfs.dag.get(multihash, { format: LFCTx.codec, hashAlg: defaultHashAlg})
           const index = mempool.indexOf(tx)
           mempool.splice(index)
@@ -182,11 +172,47 @@ export class DAGChain extends Chain {
     messagePool.add(multihash)
   }
 
+  async blockMined(block) {
+    globalThis.states.mining = false;
+    leofcoin.miners.forEach(miner => miner.stop());
+
+    if (this.chain[block.index]) {
+      if (globalThis.pubsub.subscribers['invalid-block']) globalThis.pubsub.publish('invalid-block', block);
+      return
+    }
+console.log(block.transactions);
+    try {
+      await this.validateBlock(this.chain[this.chain.length - 1], block, this.difficulty(), await this.getUnspent());
+      // add to tx local before sending block
+      for (const tx of block.transactions) {
+        await leofcoin.api.transaction.put(tx)
+      }
+console.log(block.transactions);
+      await this.addBlock(block);
+      if (peernet) {
+        block = JSON.stringify(block)
+        peernet.publish('block-added', block)
+      }
+    } catch (error) {
+      if (await this.blockHash(block) !== block.hash) console.error('hash')
+      if (this.getDifficulty(block.hash) > this.difficulty()) console.error('hash')
+
+      // TODO: remove publish invalid-block
+      debug(`Invalid block ${block.hash}`)
+      if (globalThis.pubsub.subscribers['invalid-block']) globalThis.pubsub.publish('invalid-block', block);
+
+      // await globalThis.ipfs.pubsub.publish('invalid-block', Buffer.from(JSON.stringify(block)));
+      console.log('invalid', error);
+    }
+
+    leofcoin.miners.forEach(miner => miner.start());
+    globalThis.states.mining = true;
+  }
+
   // TODO: go with previous block instead off lastBlock
   // TODO: validate on sync ...
   async announceBlock(block) {
     if (typeof block !== 'object') block = JSON.parse(block)
-
     if (this.chain[block.index]) {
       if (globalThis.pubsub.subscribers['invalid-block']) globalThis.pubsub.publish('invalid-block', block);
 
@@ -198,22 +224,22 @@ export class DAGChain extends Chain {
     if (block.index > this.chain[this.chain.length - 1].index + 1) await leofcoin.api.chain.resync(block)
 
     try {
-      if (block.transactions[0].multihash) {
-        const transactions = []
-        for (const {multihash} of block.transactions) {
-          const tx = await leofcoin.api.transaction.get(multihash)
-          if (!await leofcoin.api.transaction.has(multihash)) {
-            await leofcoin.api.transaction.put(tx)
-          }
-          transactions.push(tx)
-        }
-
-        block.transactions = transactions
-      }
       // const previousBlock = await lastBlock(); // test
       await this.validateBlock(this.chain[this.chain.length - 1], block, this.difficulty(), await this.getUnspent());
       await this.addBlock(block); // add to chain
 
+      // if (block.transactions[0].multihash) {
+      //   const transactions = []
+      //   for (const {multihash} of block.transactions) {
+      //     const tx = await leofcoin.api.transaction.get(multihash)
+      //     if (!await leofcoin.api.transaction.has(multihash)) {
+      //       await leofcoin.api.transaction.put(tx)
+      //     }
+      //     transactions.push(tx)
+      //   }
+      //
+      //   block.transactions = transactions
+      // }
 
       if (peernet) {
         block = JSON.stringify(block)
