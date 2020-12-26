@@ -202,6 +202,9 @@ export class DAGChain extends Chain {
         const transactions = []
         for (const {multihash} of block.transactions) {
           const tx = await leofcoin.api.transaction.get(multihash)
+          if (!await leofcoin.api.transaction.has(multihash)) {
+            await leofcoin.api.transaction.put(tx)
+          }
           transactions.push(tx)
         }
 
@@ -209,13 +212,6 @@ export class DAGChain extends Chain {
       }
       // const previousBlock = await lastBlock(); // test
       await this.validateBlock(this.chain[this.chain.length - 1], block, this.difficulty(), await this.getUnspent());
-
-      for await (let tx of block.transactions) {
-        if (!await leofcoin.api.transaction.has(multihash)) {
-          await leofcoin.api.transaction.put(tx)
-        }
-      }
-
       await this.addBlock(block); // add to chain
 
 

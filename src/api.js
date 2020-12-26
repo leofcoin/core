@@ -5,6 +5,9 @@ import { or } from './shorten.js';
 import bus from './lib/bus.js';
 import Miner from './lib/miner.js';
 import MultiWallet from './../node_modules/@leofcoin/multi-wallet/src/index'
+import { cpus } from 'os'
+import os from 'os-utils'
+
 // TODO: multiwallet in browser
 const miners = [];
 const chain = new Chain()
@@ -235,6 +238,23 @@ export const send = async ({from, to, amount, message}, response) => {
 
   return value;
 }
+
+export const cpu = () => {
+  const value = cpus()
+  return {
+    model: value[0].model,
+    speed: value[0].speed,
+    cores: value.length
+  }
+}
+
+export const cores = () => cpu().cores
+
+export const cpuUsage = () => new Promise((resolve, reject) => {
+  os.cpuUsage(usage => {
+    resolve(usage)
+  })
+})
 
 const getBalanceForAddress = chain.getBalanceForAddress.bind(chain);
 

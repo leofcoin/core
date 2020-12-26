@@ -22,33 +22,12 @@ const sync = async () => {
       await chainStore.put('localIndex', 0)
       const node = await new LFCNode(GENESISBLOCK)
       await leofcoin.api.block.put(node)
-      // await blockStore.put(genesisCID, node.serialize())
     }
-    // console.log(await leofcoin.block.dag.get("zsNS6wZiHT3AuWEsd6sE6oPEcCnd2pWcNKPfNUofoEybxx57Y45N4xJKBAdZH1Uh8Wm3e1k2nNhhuSai9z3WAK6pHtpmjg"));
     const { localIndex, multihash } = await localBlock();
-    // const localIndex = await chainStore.get('localIndex')
-    // const c = await chainStore.get('localBlock')
-    // globalThis.ipfs.name.publish(multihash)
     const { hash, index } = await chain.longestChain();
     if (index > Number(localIndex)) {
-      // const job = () => new Promise(async (resolve, reject) => {
-      //   setTimeout(async () => {
-      //     reject()
-      //   }, 5000);
-        leofcoin.currentBlockHash = hash;
-        leofcoin.currentBlockNode = await leofcoin.api.block.get(leofcoin.curentBlockHash)
-      //   resolve()
-      // })
-
-      // try {
-      //   await job()
-      // } catch (e) {
-      //   try {
-      //     await job()
-      //   } catch (e) {
-      //     console.warn("couldn't sync chain");
-      //   }
-      // }
+      leofcoin.currentBlockHash = hash;
+      leofcoin.currentBlockNode = await leofcoin.api.block.get(leofcoin.curentBlockHash)
     } else {
       if (index === 0) leofcoin.currentBlockHash = genesisCID
       else leofcoin.currentBlockHash = multihash || await localDAGMultiaddress();
