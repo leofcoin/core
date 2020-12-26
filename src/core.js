@@ -97,9 +97,6 @@ export const core = async (config = {}, genesis = false) => {
     process.on('exit', async () => {
       console.log('exit');
         try {
-          await globalThis.pubsub.unsubscribe('block-added');
-          await globalThis.pubsub.unsubscribe('announce-transaction');
-          await globalThis.pubsub.unsubscribe('invalid-transaction');
         } catch (e) {
           console.log(e);
         }
