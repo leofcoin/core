@@ -63,7 +63,6 @@ const localBlock = async () => {
       multihash
     }
   } catch (e) {
-    console.log(e);
     await chainStore.put('localBlock', genesisCID)
     await chainStore.put('localIndex', 0)
     return await localBlock();
@@ -135,10 +134,16 @@ const updateLocals = async (cid, index) => {
 }
 
 const resync = async (block) => {
+  if (globalThis.states.syncing) return
+  globalThis.states.syncing = true
   try {
     // global.states.syncing = true;
     // bus.emit('syncing', true);
     if (!block) {
+      if (!await leofcoin.api.block.has(genesisCID)) {
+        await leofcoin.api.block.put(GENESISBLOCK)
+        await updateLocals(genesisCID, 0)
+      }
       await leofcoin.api.chain.sync();
     } else {
       leofcoin.currentBlockNode = await new LFCNode(block)
@@ -179,6 +184,7 @@ const resync = async (block) => {
     await updateLocals(genesisCID, 0)
     console.error('syncChain', e);
   }
+  globalThis.states.false = true
   return;
 }
 
@@ -220,7 +226,8 @@ export default class GlobalScope {
         await peernet.transaction.put(cid.toString('base58btc'), data)
         // return globalThis.ipfs.dag.put(node, { format: LFCTxUtil.codec, hashAlg: LFCTxUtil.defaultHashAlg, version: 1, baseFormat: 'base58btc' })
 
-      }
+      },
+      has: hash => peernet.transaction.has(hash)
     }
     leofcoin.api.block = {
       put: async (node) => {
