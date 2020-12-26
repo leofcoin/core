@@ -9,7 +9,8 @@ import { cpus } from 'os'
 import os from 'os-utils'
 
 // TODO: multiwallet in browser
-const miners = [];
+globalThis.leofcoin = globalThis.leofcoin || {}
+globalThis.leofcoin.miners = [];
 const chain = new Chain()
 
 globalThis.bus = globalThis.bus || bus
@@ -94,26 +95,26 @@ export const mine = async config => {
       // miner.donationAddress = donationAddress;
       // miner.donationAmount = donationAmount;
       miner.start();
-      miners.push(miner);
+      leofcoin.miners.push(miner);
     }
   }
-  if (globalThis.states.mining && miners.length === intensity) {
-    miners.forEach(miner => miner.stop());
+  if (globalThis.states.mining && leofcoin.miners.length === intensity) {
+    leofcoin.miners.forEach(miner => miner.stop());
     globalThis.states.mining = false;
-  } else if (!globalThis.states.mining && miners.length === intensity) {
-    miners.forEach(miner => miner.start());
+  } else if (!globalThis.states.mining && leofcoin.miners.length === intensity) {
+    leofcoin.miners.forEach(miner => miner.start());
     globalThis.states.mining = true;
   } else {
-    if (miners.length > 0 && miners.length === intensity) {
-      miners.forEach(miner => {
+    if (leofcoin.miners.length > 0 && leofcoin.miners.length === intensity) {
+      leofcoin.miners.forEach(miner => {
         miner.address = address;
       });
-    } else if (miners.length > intensity) {
-      const removeCount = miners.length - intensity
-      const removed = miners.slice(0, removeCount);
+    } else if (leofcoin.miners.length > intensity) {
+      const removeCount = leofcoin.miners.length - intensity
+      const removed = leofcoin.miners.slice(0, removeCount);
       removed.forEach(miner => miner.stop());
-    } else if (miners.length < intensity && miners.length > 0) {
-      const addCount = intensity - miners.length;
+    } else if (leofcoin.miners.length < intensity && leofcoin.miners.length > 0) {
+      const addCount = intensity - leofcoin.miners.length;
       addMiner(addCount);
     } else {
       addMiner(intensity);
