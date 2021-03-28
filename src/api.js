@@ -224,15 +224,15 @@ export const send = async ({from, to, amount, message}, response) => {
     // something like accounts: [{ name, internal: [internal(0), internal(1), ...]}]
     wallet = _accounts[names.indexOf(from[1])][0].external(0)
     value = await chain.buildTransaction(wallet, to, parseInt(amount), await chain.getUnspentForAddress(wallet.address))
-    value = await leofcoin.api.transaction.dag.put(value)
-    console.log({value});
-    const tx = await leofcoin.api.transaction.get(value.multihash)
+    const hash = await leofcoin.api.transaction.put(value)
+    // const tx = await leofcoin.api.transaction.get(value.multihash)
     // const cid = await util.cid(tx.serialize())
     // { multihash: cid.toBaseEncodedString(), size: tx.size};
-    globalThis.ipfs.pubsub.publish('announce-transaction', JSON.stringify(value))
-
-    tx.hash = hashFromMultihash(value.multihash)
-    value = tx
+    value = await leofcoin.api.transaction.get(hash)
+    globalThis.pubsub.publish('announce-transaction', JSON.stringify(value.toJSON()))
+    mempool.push({multihash: hash, size: value.size})
+    // tx.hash = hashFromMultihash(value.multihash)
+    // value = tx
   } catch (e) {
     throw e;
   }

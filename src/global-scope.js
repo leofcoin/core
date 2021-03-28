@@ -6,13 +6,14 @@ import { log } from './utils';
 // import SocketClient from 'socket-request-client';
 import { debug } from './utils'
 import { hour } from './ms'
-
+import db from 'level-mem'
 const chain = new Chain()
 import * as api from './api'
 
 globalThis.leofcoin = globalThis.leofcoin || {}
 leofcoin.api = leofcoin.api || {}
-
+const Level = require('datastore-level')
+globalThis.memStore = new Level('/leofcoin/mem/', {db})
 const sync = async () => {
   try {
 
@@ -223,7 +224,9 @@ export default class GlobalScope {
         }
         const data = await node.serialize()
         const cid = await LFCTxUtil.cid(data)
-        await peernet.transaction.put(cid.toString('base58btc'), data)
+        const hash = cid.toString('base58btc')
+        await peernet.transaction.put(hash, data)
+        return hash
         // return globalThis.ipfs.dag.put(node, { format: LFCTxUtil.codec, hashAlg: LFCTxUtil.defaultHashAlg, version: 1, baseFormat: 'base58btc' })
 
       },
@@ -236,7 +239,9 @@ export default class GlobalScope {
         }
         const data = await node.serialize()
         const cid = await util.cid(data)
-        await peernet.block.put(cid.toString('base58btc'), data)
+        const hash = cid.toString('base58btc')
+        await peernet.block.put(hash, data)
+        return hash
       },
       get: async multihash => {
         // Promise.race(promises)

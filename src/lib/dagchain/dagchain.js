@@ -103,18 +103,20 @@ export class DAGChain extends Chain {
     return new Promise(async (resolve, reject) => {
       try {
         const { index, hash } = block
+
         log(`add block: ${index}  ${hash}`);
+        const _tx = []
+        for await (let tx of block.transactions) {
+          const node = await leofcoin.api.transaction.get(tx.multihash)
+          if (await !leofcoin.api.transaction.has(tx.multihash)) await leofcoin.api.transaction.put(node)
+
+          _tx.push(node.toJSON())
+        }
 
         block.hash = hash;
         chain[block.index] = block
+        chain[block.index].transactions = _tx
 
-        for await (let tx of block.transactions) {
-          const node = await new LFCTx({...tx})
-          const cid = await ipldLfcTx.util.cid(await node.serialize())
-          if (!await leofcoin.api.transaction.has(cid.toString('base58btc'))) {
-            await leofcoin.api.transaction.put(node)
-          }
-        }
         if (!await leofcoin.api.block.has(hash)) await leofcoin.api.block.put({...block})
 
         // await leofcoin.api.block.get(hash)
@@ -152,7 +154,8 @@ export class DAGChain extends Chain {
     });
   }
 
-  async announceTransaction({data, from}) {
+  async announceTransaction(tx) {
+    console.log({tx});
     const {multihash, size} = JSON.parse(data.toString());
     // const { value } = await getTx(multihash)
     // value.hash = multihash
@@ -178,13 +181,27 @@ export class DAGChain extends Chain {
       if (globalThis.pubsub.subscribers['invalid-block']) globalThis.pubsub.publish('invalid-block', block);
       return
     }
+    const _tx = []
+    for (const index in block.transactions) {
+      let tx;
+      tx = await memStore.get(block.transactions[index].multihash)
+      console.log(tx.toString());
+      const multihash = block.transactions[index].multihash
+      if (multihash) {
+        tx = await leofcoin.api.transaction.put(JSON.parse(tx.toString()))
+        tx = await leofcoin.api.transaction.get(tx)
+      } else {
+        tx = block.transactions[index]
+      }
+
+      _tx.push(tx)
+    }
+    // block.transactions = _tx
 console.log(block.transactions);
     try {
-      await this.validateBlock(this.chain[this.chain.length - 1], block, this.difficulty(), await this.getUnspent());
+      await this.validateBlock(this.chain[this.chain.length - 1], {...block}, this.difficulty(), await this.getUnspent());
       // add to tx local before sending block
-      for (const tx of block.transactions) {
-        await leofcoin.api.transaction.put(tx)
-      }
+
 console.log(block.transactions);
       await this.addBlock({...block});
       if (peernet) {

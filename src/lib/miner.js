@@ -96,8 +96,8 @@ export default class Miner {
   async mine(job, lastValidBlock) {
     const address = this.address || this.donationAddress;
     const start = Date.now();
-    const {block, hashes, index} = await this.mineBlock(chain.difficulty(), address, job);
-
+    const {mined, rawBlock} = await this.mineBlock(chain.difficulty(), address, job);
+    const {block, hashes, index} = mined
     if (hashes) {
       const now = Date.now();
       const seconds = (now - start) / 1000;
@@ -143,7 +143,8 @@ export default class Miner {
     console.log(block);
     console.log(`${job}::Started mining block ${block.index}`);
 
-    return this.findBlockHash(block, difficulty);
+    const mined = await this.findBlockHash(block, difficulty);
+    return {mined, rawBlock: block}
   }
 
   /**
