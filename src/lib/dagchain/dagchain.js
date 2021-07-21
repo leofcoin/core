@@ -113,11 +113,12 @@ export class DAGChain extends Chain {
           _tx.push(node.toJSON())
         }
 
+        if (!await leofcoin.api.block.has(hash)) await leofcoin.api.block.put({...block})
+
         block.hash = hash;
         chain[block.index] = block
         chain[block.index].transactions = _tx
 
-        if (!await leofcoin.api.block.has(hash)) await leofcoin.api.block.put({...block})
 
         // await leofcoin.api.block.get(hash)
 
@@ -175,7 +176,9 @@ export class DAGChain extends Chain {
 
   async blockMined(block) {
     globalThis.states.mining = false;
-    leofcoin.miners.forEach(miner => miner.stop());
+    for (const miner of leofcoin.miners) {
+      await miner.stop()
+    }
 
     if (this.chain[block.index]) {
       if (globalThis.pubsub.subscribers['invalid-block']) globalThis.pubsub.publish('invalid-block', block);
@@ -220,8 +223,12 @@ console.log(block.transactions);
       console.log('invalid', error);
     }
 
-    leofcoin.miners.forEach(miner => miner.start());
     globalThis.states.mining = true;
+    
+    for (const miner of leofcoin.miners) {
+      miner.start()
+    }
+
   }
 
   // TODO: go with previous block instead off lastBlock

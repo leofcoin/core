@@ -80,6 +80,7 @@ const resolveBlocks = async (node, index) => {
     const hash = tx.multihash
     if (hash) {
       tx = await leofcoin.api.transaction.get(hash)
+      if (!leofcoin.api.transaction.has(hash)) await leofcoin.api.transaction.put(tx)
       tx = tx.toJSON()
     }
     _tx.push(tx)
@@ -90,6 +91,7 @@ const resolveBlocks = async (node, index) => {
   debug(`loaded block: ${node.index} - ${globalThis.chain[node.index].hash}`);
   if (node.index - 1 !== -1) {
       const hash = node.prevHash
+      console.log(await leofcoin.api.block.get(hash))
       node = await leofcoin.api.block.get(node.prevHash)
       const has = await leofcoin.api.block.has(hash)
       if (!has) {
@@ -215,6 +217,7 @@ export default class GlobalScope {
     leofcoin.api = leofcoin.api ? {...leofcoin.api, ...api} : {...api}
     leofcoin.api.transaction = {
       get: async multihash => {
+        conole.log(await transactionStore.has(hash))
         const node = await peernet.transaction.get(multihash)
         return await new LFCTx(node)
       },
