@@ -217,7 +217,7 @@ export default class GlobalScope {
     leofcoin.api = leofcoin.api ? {...leofcoin.api, ...api} : {...api}
     leofcoin.api.transaction = {
       get: async multihash => {
-        conole.log(await transactionStore.has(hash))
+        console.log(await transactionStore.has(hash))
         const node = await peernet.transaction.get(multihash)
         return await new LFCTx(node)
       },
