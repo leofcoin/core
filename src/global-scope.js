@@ -91,7 +91,6 @@ const resolveBlocks = async (node, index) => {
   debug(`loaded block: ${node.index} - ${globalThis.chain[node.index].hash}`);
   if (node.index - 1 !== -1) {
       const hash = node.prevHash
-      console.log(await leofcoin.api.block.get(hash))
       node = await leofcoin.api.block.get(node.prevHash)
       const has = await leofcoin.api.block.has(hash)
       if (!has) {
@@ -187,7 +186,7 @@ const resync = async (block) => {
     await updateLocals(genesisCID, 0)
     console.error('syncChain', e);
   }
-  globalThis.states.false = true
+  globalThis.states.syncing = false
   return;
 }
 
@@ -217,7 +216,6 @@ export default class GlobalScope {
     leofcoin.api = leofcoin.api ? {...leofcoin.api, ...api} : {...api}
     leofcoin.api.transaction = {
       get: async multihash => {
-        console.log(await transactionStore.has(multihash))
         const node = await peernet.transaction.get(multihash)
         return await new LFCTx(node)
       },
@@ -252,25 +250,6 @@ export default class GlobalScope {
         return await new LFCNode(Buffer.from(node))
       },
       has: multihash => peernet.block.has(multihash)
-      // dag: {
-      //   get: async multihash => {
-      //     try {
-      //       const { value } = await globalThis.ipfs.dag.get(multihash)
-      //       value.transactions = [...value.transactions]
-      //       return await new LFCNode({...value})
-      //     } catch (e) {
-      //       throw e
-      //     }
-      //   },
-      //   put: async node => {
-      //     try {
-      //       console.log(node.toJSON());
-      //       globalThis.ipfs.dag.put(node, { format: util.codec, hashAlg: util.defaultHashAlg, vesion: 1, baseFormat: 'base58btc'})
-      //     } catch (e) {
-      //       throw e
-      //     }
-      //   }
-      // }
     }
     leofcoin.api.name = {
       /**
@@ -371,7 +350,6 @@ export default class GlobalScope {
       const store = await chainStore.get()
       const keys = Object.keys(store)
       const value = {index: 0}
-      console.log(keys.length);
       if (keys.length > 3) {
         for (const key of keys) {
           if (Number(key) && Number(key) > Number(value.index)) {
@@ -388,21 +366,18 @@ export default class GlobalScope {
     let ready = false
 
     pubsub.subscribe('peer:connected', async peer => {
-      console.log('peer');
       if (!ready) {
         ready = true
         pubsub.publish('peernet:ready', ready)
       }
       const request = new globalThis.peernet.protos['peernet-request']({request: 'lastBlock'})
       const to = peernet._getPeerId(peer.id)
-console.log(to);
       if (to) {
         const node = await peernet.prepareMessage(to, request.encoded)
         let response = await peer.request(node.encoded)
         const proto = new globalThis.peernet.protos['peernet-message'](Buffer.from(response.data))
         response = new globalThis.peernet.protos['peernet-response'](Buffer.from(proto.decoded.data))
         let block = JSON.parse(response.decoded.response)
-        console.log({block});
         const { localIndex } = await localBlock();
         if (Number(block.height) > Number(localIndex)) {
           block = await leofcoin.api.block.get(block.hash)
