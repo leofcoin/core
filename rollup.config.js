@@ -31,7 +31,7 @@ export default [
 			dir: 'dist/commonjs',
 			format: 'cjs',
 			sourcemap: true,
-			intro: `const ENVIRONMENT = {version: '${version}', production: true};\nlet LeofcoinStorage;\nlet QRCode;\nlet Ipfs;`,
+			intro: `const ENVIRONMENT = {version: '${version}', production: true};\nlet QRCode;\nlet Ipfs;`,
 			banner: `/* ${name} version ${version} */`,
 			footer: '/* follow Leofcoin on Twitter! @leofcoin */'
 		},
@@ -46,7 +46,8 @@ export default [
 	      IPFS_IMPORT: `new Promise((resolve, reject) => {
 	        if (!Ipfs) Ipfs = require('ipfs');
 	        resolve()
-	      })`
+	      })`,
+				FETCH_IMPORT: `const fetch = require('node-fetch')`
 			})
 		]
 		// plugins: [
@@ -75,7 +76,12 @@ export default [
 			banner: `/* ${name} version ${version} */`,
 			footer: '/* follow Leofcoin on Twitter! @leofcoin */'
 		},
-		plugins:[json()],
+		plugins:[
+			json(),
+			modify({
+				FETCH_IMPORT: ``
+			})
+		],
 	},
 	{
 		input: ['src/http/http-client.js'],

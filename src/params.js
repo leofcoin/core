@@ -27,28 +27,31 @@ if (verbose) {
 export const olivia = process.argv.includes('olivia') || process.argv.includes('testnet');
 export const AppData = join(homedir(), 'AppData', 'Roaming', olivia ? 'Leofcoin/olivia' : 'Leofcoin');
 // const netHash = net => encode(keccak(Buffer.from(`${net}-`), 256)).slice(0, 24);
-export const APPDATAPATH = (() => {
-  switch (process.platform) {
-    case 'win32':
-      return join(homedir(), 'AppData', 'Roaming', 'Leofcoin', olivia ? 'olivia' : '')
-      break;
-    case 'linux':
-      return join(homedir(), '.leofcoin', olivia ? 'olivia' : '')
-      break;
-    case 'darwin':
-      // TODO: implement darwin path
-      break;
-    case 'android':
-      // TODO: implement android path
-      // experimental
-      break;
-  }
-})();
+// export const APPDATAPATH = (() => {
+//   switch (process.platform) {
+//     case 'win32':
+//       return join(homedir(), 'AppData', 'Roaming', 'Leofcoin', olivia ? 'olivia' : '')
+//       break;
+//     case 'linux':
+//       return join(homedir(), '.leofcoin', olivia ? 'olivia' : '')
+//       break;
+//     case 'darwin':
+//       // TODO: implement darwin path
+//       break;
+//     case 'android':
+//       // TODO: implement android path
+//       // experimental
+//       break;
+// 		case globalThis.window:
+// 			return 'walletStorage'
+// 			break;
+//   }
+// })();
 
 
 // export const netPrefix = (async () => await dapnets('leofcoin').netPrefix)()
 
-export const walletPath = join(APPDATAPATH, 'wallet.dat');
+// export const walletPath = join(APPDATAPATH, 'wallet.dat');
 
 export const signalServers = (() => {
   if (network === 'olivia') return [

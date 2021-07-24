@@ -1,12 +1,12 @@
 import { configPath } from './params';
 import bs58 from 'bs58';
 import chalk from 'chalk';
-import { readFile, writeFile } from 'fs'
+// import { readFile, writeFile } from 'fs'
 import { promisify } from 'util'
 const { encode } = bs58
 
-const read = promisify(readFile)
-const write = promisify(writeFile)
+// const read = promisify(readFile)
+// const write = promisify(writeFile)
 
 
 if (process.platform === 'win32') {
@@ -137,18 +137,18 @@ const defaultConfig = async () => {
   }
 };
 
-export const getUserConfig = async () => {
-	let config;
-  try {
-    config = await read(configPath)
-    config = JSON.parse(config.toString())
-  } catch (e) {
-    config = await defaultConfig()
-    await write(configPath, JSON.stringify(config))
-    debug(`new config file created @${configPath}`);
-  }
-  return config
-}
+// export const getUserConfig = async () => {
+// 	let config;
+//   try {
+//     config = await read(configPath)
+//     config = JSON.parse(config.toString())
+//   } catch (e) {
+//     config = await defaultConfig()
+//     await write(configPath, JSON.stringify(config))
+//     debug(`new config file created @${configPath}`);
+//   }
+//   return config
+// }
 
 /**
  * allow retry upto "amount" times
@@ -168,4 +168,4 @@ export const allowFailureUntillEnough = (func, amount = 5) => new Promise(async 
   }
 });
 
-export { read }
+// export { read }

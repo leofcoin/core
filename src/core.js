@@ -69,7 +69,7 @@ export const core = async (config = {}, genesis = false) => {
     // apiServer()
 
     globalThis.pubsub = globalThis.pubsub || new Pubsub()
-    globalThis.clients = http()
+    // globalThis.clients = http()
 
     // checkpoint
       // await chainStore.put('localBlock', 'zsNS6wZiHUQ8R4MZLcGVuM1Y1V6JQJdDEuLBUTBXFyTuBCk3DwY2JNezZw2dvxSkcw5qZioqLKuBwqTi2adEgNHxLrbcem')
