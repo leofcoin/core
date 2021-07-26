@@ -42,6 +42,16 @@ const defaultStarConfig = {
 
 }
 
+export const environment = () => {
+  const _navigator = globalThis.navigator
+  if (!_navigator) {
+    return 'node'
+  } else if (_navigator && /electron/i.test(_navigator.userAgent)) {
+    return 'electron'
+  } else {
+    return 'browser'
+  }
+}
 export const core = async (config = {}, genesis = false) => {
   if (config.star) config = { ...defaultStarConfig, ...config }
   else config = { ...defaultConfig, ...config }
@@ -69,7 +79,7 @@ export const core = async (config = {}, genesis = false) => {
     // apiServer()
 
     globalThis.pubsub = globalThis.pubsub || new Pubsub()
-    // globalThis.clients = http()
+    if (environment() !== 'browser') globalThis.clients = http()
 
     // checkpoint
       // await chainStore.put('localBlock', 'zsNS6wZiHUQ8R4MZLcGVuM1Y1V6JQJdDEuLBUTBXFyTuBCk3DwY2JNezZw2dvxSkcw5qZioqLKuBwqTi2adEgNHxLrbcem')
