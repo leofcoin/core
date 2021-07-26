@@ -180,10 +180,6 @@ const resync = async (block) => {
       globalThis.chain[0].hash = genesisCID;
     }
   } catch (e) {
-    globalThis.chain[0] = GENESISBLOCK
-    globalThis.chain[0].index = 0;
-    globalThis.chain[0].hash = genesisCID;
-    await updateLocals(genesisCID, 0)
     console.error('syncChain', e);
   }
   globalThis.states.syncing = false
