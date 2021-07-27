@@ -70,21 +70,36 @@ const localBlock = async () => {
   }
 }
 
-const resolveBlocks = async (node, index) => {
+const resolveBlocks = (node, index) => new Promise(async (resolve, reject) => {
   const cid = await util.cid(await node.serialize())
   globalThis.chain[node.index] = node.toJSON();
   globalThis.chain[node.index].hash = cid.toBaseEncodedString()
   const _tx = [];
   debug(`loading transactions`)
-  for (let tx of globalThis.chain[node.index].transactions) {
-    const hash = tx.multihash
-    if (hash) {
-      tx = await leofcoin.api.transaction.get(hash)
-      if (!leofcoin.api.transaction.has(hash)) await leofcoin.api.transaction.put(tx)
-      tx = tx.toJSON()
+  try {
+    for (let tx of globalThis.chain[node.index].transactions) {
+      const hash = tx.multihash
+
+      const timeout = setTimeout(() => {
+        const text = `Resolving transaction ${hash} timedout`
+
+
+        resolve(resolveBlocks(node, index))
+      }, 5000)
+
+      if (hash) {
+        tx = await leofcoin.api.transaction.get(hash)
+        clearTimeout(timeout)
+        if (!leofcoin.api.transaction.has(hash)) await leofcoin.api.transaction.put(tx)
+        tx = tx.toJSON()
+      }
+      _tx.push(tx)
+      debug(`loaded tx: ${hash}`)
     }
-    _tx.push(tx)
-    debug(`loaded tx: ${hash}`)
+  } catch (e) {
+    // retry resolving the block
+    await resolveBlocks(node, index)
+    resolve()
   }
   globalThis.chain[node.index].transactions = _tx
   leofcoin.hashMap.set(node.index, cid.toBaseEncodedString())
@@ -104,15 +119,16 @@ const resolveBlocks = async (node, index) => {
       // global.blockHashSet[hash] = block.index;
       if (node.prevHash && node.prevHash !== Buffer.alloc(47).toString('hex')) {
 
-        return resolveBlocks(node, index);
+        await resolveBlocks(node, index);
+        resolve()
       }
       return;
     } catch (e) {
       console.error(e);
     }
   }
-  return
-}
+  resolve()
+})
 /**
  * last resolved, mined or minted block
  *
@@ -120,7 +136,6 @@ const resolveBlocks = async (node, index) => {
  */
 const updateLocals = async (cid, index) => {
   if (cid.isCid && cid.isCid()) cid = cid.toBaseEncodedString();
-
 
   try {
     debug(`updating chainStore to ${index}`);
@@ -165,9 +180,17 @@ const resync = async (block) => {
       const start = Date.now();
       if (index > height) {
         const value = await leofcoin.api.block.get(multihash)
-        await resolveBlocks(value, index);
+        try {
+          await resolveBlocks(value, index);
+        } catch (e) {
+          await resolveBlocks(value, index);
+        }
       }
-      else await resolveBlocks(leofcoin.currentBlockNode, height);
+      else try {
+        await resolveBlocks(leofcoin.currentBlockNode, height);
+      } catch (e) {
+        await resolveBlocks(leofcoin.currentBlockNode, height);
+      }
       const end = Date.now();
       const time = end - start;
       debug(time / 1000);
