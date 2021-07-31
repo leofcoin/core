@@ -83,7 +83,7 @@ const resolveBlocks = (node, index) => new Promise(async (resolve, reject) => {
       if (hash) {
 
         const timeout = setTimeout(async () => {
-          const text = `Resolving transaction ${hash} timedout`
+          debug(`Resolving transaction ${hash} timedout`)
           await resolveBlocks(node, index)
           resolve()
         }, 30000)
@@ -98,6 +98,7 @@ const resolveBlocks = (node, index) => new Promise(async (resolve, reject) => {
       debug(`loaded tx: ${hash}`)
     }
   } catch (e) {
+    console.warn(e);
     // retry resolving the block
     await resolveBlocks(node, index)
     resolve()
@@ -238,12 +239,17 @@ export default class GlobalScope {
     leofcoin.api.transaction = {
       get: async multihash => {
         const node = await peernet.transaction.get(multihash)
-        return await new LFCTx(node)
+        return await new LFCTx(Buffer.from(node))
       },
       put: async node => {
-        if (!node.isLFCTx) {
-          node = await new LFCTx(node)
-        }
+        node = await new LFCTx({
+          time: node.time,
+          id: node.id,
+          inputs: node.inputs,
+          outputs: node.outputs,
+          reward: node.reward
+        })
+
         const data = await node.serialize()
         const cid = await LFCTxUtil.cid(data)
         const hash = cid.toString('base58btc')
