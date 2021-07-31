@@ -53,6 +53,31 @@ export default [
 		// plugins: [
 		// 	uglify()
 		// ],
+	}, {
+		input: ['src/core.js'],
+		output: {
+			dir: 'dist/browser',
+			format: 'cjs',
+			sourcemap: true,
+			intro: `const ENVIRONMENT = {version: '${version}', production: true};\nlet QRCode;\nlet Ipfs;`,
+			banner: `/* ${name} version ${version} */`,
+			footer: '/* follow Leofcoin on Twitter! @leofcoin */'
+		},
+		plugins:[
+			json(),
+			modify({
+		    STORAGE_IMPORT: `new Promise((resolve, reject) => {
+		      if (!LeofcoinStorage) LeofcoinStorage = require('@leofcoin/storage');
+		      resolve()
+		    });`,
+	      QRCODE_IMPORT: `if (!QRCode) QRCode = require('qrcode');`,
+	      IPFS_IMPORT: `new Promise((resolve, reject) => {
+	        if (!Ipfs) Ipfs = require('ipfs');
+	        resolve()
+	      })`,
+				"import fetch from 'node-fetch'": ''
+			})
+		]
 	},
 	{
 		input: ['src/lib/workers/miner-worker.js'],
@@ -79,7 +104,7 @@ export default [
 		plugins:[
 			json(),
 			modify({
-				FETCH_IMPORT: ``
+				"import fetch from 'node-fetch'": ``
 			})
 		],
 	},

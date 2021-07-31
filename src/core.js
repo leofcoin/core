@@ -16,7 +16,7 @@ import http from './http/http'
 import Server from './../node_modules/socket-request-server/src/index'
 import Client from './../node_modules/socket-request-client/src/index'
 // import LFCBlock from './lib/messages/block'
-import Peernet from './../node_modules/@leofcoin/peernet/dist/module/peernet.js'
+import Peernet from './../../peernet/src/peernet.js'
 pubsub.subscribe('data', data => {
   console.log(data.toString());
 })

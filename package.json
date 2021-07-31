@@ -8,7 +8,7 @@
     "w": "rollup -c -w",
     "test": "echo \"Error: no test specified\" && exit 1",
     "doc": "./node_modules/.bin/esdoc",
-    "b": "browserify dist/commonjs/core.js --standalone LeofcoinCore -o dist/browser/core.js"
+    "b": "browserify dist/browser/core.js --standalone LeofcoinCore -o dist/browser/core.js"
   },
   "bin": {
     "leofcoin": "bin/cli.js"
