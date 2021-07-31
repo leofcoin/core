@@ -80,7 +80,7 @@ const resolveBlocks = (node, index) => new Promise(async (resolve, reject) => {
     for (let tx of globalThis.chain[node.index].transactions) {
       const hash = tx.multihash
 
-      const timeout = setTimeout(() => {
+      const timeout = () => setTimeout(() => {
         const text = `Resolving transaction ${hash} timedout`
 
 
@@ -88,6 +88,7 @@ const resolveBlocks = (node, index) => new Promise(async (resolve, reject) => {
       }, 5000)
 
       if (hash) {
+        timeout()
         tx = await leofcoin.api.transaction.get(hash)
         clearTimeout(timeout)
         if (!leofcoin.api.transaction.has(hash)) await leofcoin.api.transaction.put(tx)
