@@ -87,10 +87,11 @@ const resolveBlocks = (node, index) => new Promise(async (resolve, reject) => {
           await resolveBlocks(node, index)
           resolve()
         }, 30000)
-
+        const has = await leofcoin.api.transaction.has(hash)
         tx = await leofcoin.api.transaction.get(hash)
+        debug(`tx: ${hash} loaded from network: ${has ? false : true}`)
         clearTimeout(timeout)
-        if (!leofcoin.api.transaction.has(hash)) await leofcoin.api.transaction.put(tx)
+        if (!has) await leofcoin.api.transaction.put(tx)
         tx = tx.toJSON()
       }
       _tx.push(tx)
@@ -108,6 +109,7 @@ const resolveBlocks = (node, index) => new Promise(async (resolve, reject) => {
       const hash = node.prevHash
       node = await leofcoin.api.block.get(node.prevHash)
       const has = await leofcoin.api.block.has(hash)
+      debug(`${hash} loaded from network: ${has ? false : true}`)
       if (!has) {
         await leofcoin.api.block.put(node)
         await chainStore.put(node.index, hash)
