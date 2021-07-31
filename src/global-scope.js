@@ -86,7 +86,7 @@ const resolveBlocks = (node, index) => new Promise(async (resolve, reject) => {
           debug(`Resolving transaction ${hash} timedout`)
           await resolveBlocks(node, index)
           resolve()
-        }, 30000)
+        }, 10000)
         const has = await leofcoin.api.transaction.has(hash)
         tx = await leofcoin.api.transaction.get(hash)
         debug(`tx: ${hash} loaded from network: ${has ? false : true}`)
@@ -107,15 +107,23 @@ const resolveBlocks = (node, index) => new Promise(async (resolve, reject) => {
   leofcoin.hashMap.set(node.index, cid.toBaseEncodedString())
   debug(`loaded block: ${node.index} - ${globalThis.chain[node.index].hash}`);
   if (node.index - 1 !== -1) {
-      const hash = node.prevHash
-      node = await leofcoin.api.block.get(node.prevHash)
-      const has = await leofcoin.api.block.has(hash)
-      debug(`${hash} loaded from network: ${has ? false : true}`)
-      if (!has) {
-        await leofcoin.api.block.put(node)
-        await chainStore.put(node.index, hash)
-        debug(`added block: ${node.index} ${hash}`);
-      }
+    const hash = node.prevHash
+
+    const timeout = setTimeout(async () => {
+      debug(`Resolving block ${hash} timedout`)
+      await resolveBlocks(node, index)
+      resolve()
+    }, 10000)
+
+    node = await leofcoin.api.block.get(node.prevHash)
+    const has = await leofcoin.api.block.has(hash)
+    debug(`${hash} loaded from network: ${has ? false : true}`)
+    if (!has) {
+      await leofcoin.api.block.put(node)
+      await chainStore.put(node.index, hash)
+      debug(`added block: ${node.index} ${hash}`);
+    }
+    clearTimeout(timeout)
     // }
     try {
       // store them in memory
