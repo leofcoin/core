@@ -82,9 +82,10 @@ const resolveBlocks = (node, index) => new Promise(async (resolve, reject) => {
 
       if (hash) {
 
-        const timeout = setTimeout(() => {
+        const timeout = setTimeout(async () => {
           const text = `Resolving transaction ${hash} timedout`
-          resolve(resolveBlocks(node, index))
+          await resolveBlocks(node, index)
+          resolve()
         }, 30000)
 
         tx = await leofcoin.api.transaction.get(hash)
@@ -121,7 +122,7 @@ const resolveBlocks = (node, index) => new Promise(async (resolve, reject) => {
         await resolveBlocks(node, index);
         resolve()
       }
-      return;
+      resolve()
     } catch (e) {
       console.error(e);
     }
