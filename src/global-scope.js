@@ -85,7 +85,7 @@ const resolveBlocks = (node, index) => new Promise(async (resolve, reject) => {
 
 
         resolve(resolveBlocks(node, index))
-      }, 5000)
+      }, 10000)
 
       if (hash) {
         timeout()
