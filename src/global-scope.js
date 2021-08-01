@@ -79,9 +79,7 @@ const resolveBlocks = (node, index) => new Promise(async (resolve, reject) => {
   try {
     for (let tx of globalThis.chain[node.index].transactions) {
       const hash = tx.multihash
-
       if (hash) {
-
         const timeout = setTimeout(async () => {
           debug(`Resolving transaction ${hash} timedout`)
           await resolveBlocks(node, index)
@@ -99,9 +97,7 @@ const resolveBlocks = (node, index) => new Promise(async (resolve, reject) => {
     }
   } catch (e) {
     console.warn(e);
-    // retry resolving the block
-    await resolveBlocks(node, index)
-    resolve()
+    return reject(e)
   }
   globalThis.chain[node.index].transactions = _tx
   leofcoin.hashMap.set(node.index, cid.toBaseEncodedString())
@@ -129,13 +125,11 @@ const resolveBlocks = (node, index) => new Promise(async (resolve, reject) => {
       // store them in memory
       // global.blockHashSet[hash] = block.index;
       if (node.prevHash && node.prevHash !== Buffer.alloc(47).toString('hex')) {
-
         await resolveBlocks(node, index);
-        resolve()
       }
       resolve()
     } catch (e) {
-      console.error(e);
+      return reject(e)
     }
   }
   resolve()
@@ -158,7 +152,6 @@ const updateLocals = async (cid, index) => {
   } catch (error) {
     throw error
   }
-
 }
 
 const resync = async (block) => {
@@ -191,16 +184,9 @@ const resync = async (block) => {
       const start = Date.now();
       if (index > height) {
         const value = await leofcoin.api.block.get(multihash)
-        try {
-          await resolveBlocks(value, index);
-        } catch (e) {
-          await resolveBlocks(value, index);
-        }
-      }
-      else try {
-        await resolveBlocks(leofcoin.currentBlockNode, height);
-      } catch (e) {
-        await resolveBlocks(leofcoin.currentBlockNode, height);
+        await resolveBlocks(value, index);
+      } else {
+        await resolveBlocks(leofcoin.currentBlockNode, height)
       }
       const end = Date.now();
       const time = end - start;
@@ -215,6 +201,7 @@ const resync = async (block) => {
     }
   } catch (e) {
     console.error('syncChain', e);
+    return resync(block);
   }
   globalThis.states.syncing = false
   return;
@@ -247,7 +234,7 @@ export default class GlobalScope {
     leofcoin.api.transaction = {
       get: async multihash => {
         const node = await peernet.transaction.get(multihash)
-        return await new LFCTx(Buffer.from(node))
+        return await new LFCTx(node)
       },
       put: async node => {
         node = await new LFCTx({
@@ -282,7 +269,7 @@ export default class GlobalScope {
       get: async multihash => {
         // Promise.race(promises)
         const node = await peernet.block.get(multihash)
-        return await new LFCNode(Buffer.from(node))
+        return await new LFCNode(node)
       },
       has: multihash => peernet.block.has(multihash)
     }
