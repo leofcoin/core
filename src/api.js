@@ -243,13 +243,11 @@ export const send = async ({from, to, amount, message}, response) => {
 export const cpu = () => {
   const value = cpus()
   return {
-    model: value[0].model,
-    speed: value[0].speed,
-    cores: value.length
+    cores: globalThis.navigator ? navigator.hardwareConcurrency : cpu().cores
   }
 }
 
-export const cores = () => cpu().cores
+export const cores = () => globalThis.navigator ? navigator.hardwareConcurrency : cpu().cores
 
 export const cpuUsage = () => new Promise((resolve, reject) => {
   os.cpuUsage(usage => {
