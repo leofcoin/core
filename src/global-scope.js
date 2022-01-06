@@ -84,7 +84,7 @@ const resolveBlocks = (node, index) => new Promise(async (resolve, reject) => {
           debug(`Resolving transaction ${hash} timedout`)
           await resolveBlocks(node, index)
           resolve()
-        }, 10000)
+        }, 30000)
         const has = await leofcoin.api.transaction.has(hash)
         tx = await leofcoin.api.transaction.get(hash)
         debug(`tx: ${hash} loaded from network: ${has ? false : true}`)
